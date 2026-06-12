@@ -22,6 +22,9 @@ const TALKUP_OVERLAP_S = 5
 const SPOKEN_WORDS_PER_SECOND = 2.6
 // Give slow networks the benefit of the doubt when probing tracks.
 const PROBE_TIMEOUT_MS = 8000
+// At an actual transition, silence is worse than a less polished break. If the
+// preloaded cloud voice is still pending, fall back to browser speech quickly.
+const BREAK_GRACE_MS = 900
 
 export type StationMode = 'idle' | 'loading' | 'break' | 'song' | 'paused'
 
@@ -407,6 +410,55 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
     [probeTrack],
   )
 
+  const findPlayableSequence = useCallback(
+    async (from: number, count: number) => {
+      const activeTracks = tracksRef.current
+      if (!activeTracks.length || count <= 0) return []
+      const sequence: number[] = []
+      let cursor = from
+      const maxAttempts = Math.max(activeTracks.length * count, count)
+      for (let attempt = 0; attempt < maxAttempts && sequence.length < count; attempt++) {
+        const index = await findPlayableIndex(cursor % activeTracks.length)
+        sequence.push(index)
+        cursor = (index + 1) % activeTracks.length
+      }
+      return sequence
+    },
+    [findPlayableIndex],
+  )
+
+  const makeBackupBreak = useCallback(
+    (index: number, kind: BreakKind, previousIndex?: number): BreakPlan => {
+      const activeDj = djRef.current
+      const city = contextRef.current.city || activeDj.city
+      const previousTrack =
+        typeof previousIndex === 'number' ? tracksRef.current[previousIndex] : undefined
+      const nextTrack = tracksRef.current[index]
+      const nextTitle = nextTrack?.title || 'another cut'
+      const previousTitle = previousTrack?.title || 'the last track'
+      const scripts: Record<BreakKind, string> = {
+        intro: `${activeDj.name} on Airbreak, live from ${city}. We are starting with ${nextTitle}. Stay close.`,
+        songTalk: previousTrack
+          ? `${activeDj.name} here. That was ${previousTitle}, and up next we have ${nextTitle} on a ${contextRef.current.weather.toLowerCase()} day in ${city}.`
+          : `${activeDj.name} here. Up next we have ${nextTitle} on a ${contextRef.current.weather.toLowerCase()} day in ${city}.`,
+        newsWeather: `Quick check-in from ${city}: ${contextRef.current.weather}. ${contextRef.current.headlines[0] || 'More music straight ahead.'} Now back to it with ${nextTitle}.`,
+        commercial: `This hour of Airbreak comes courtesy of Needle Drop Coffee, keeping the control room awake since forever. Back to the music with ${nextTitle}.`,
+        bumper: `Airbreak. ${activeDj.name}. ${city}. More music right now.`,
+        caller: `Just had a listener on the line asking for ${nextTitle} - you got it. This one is for you.`,
+      }
+      const script = scripts[kind] || scripts.songTalk
+      return {
+        kind,
+        title: 'Live backup break',
+        source: 'fallback',
+        tease: `Next: ${nextTitle}`,
+        script,
+        segments: [{ speaker: kind === 'bumper' ? 'imaging' : 'dj', text: script }],
+      }
+    },
+    [],
+  )
+
   const requestBreak = useCallback((index: number, kind: BreakKind, previousIndex?: number) => {
     const activeTracks = tracksRef.current
     const nextTrack = activeTracks[index]
@@ -479,29 +531,7 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
       setBufferStatus('Next break is loaded')
       return plan
     })().catch((): BreakPlan => {
-      const activeDj = djRef.current
-      const city = contextRef.current.city || activeDj.city
-      const nextTitle = nextTrack?.title || 'another cut'
-      const previousTitle = previousTrack?.title || 'the last track'
-      const scripts: Record<BreakKind, string> = {
-        intro: `${activeDj.name} on Airbreak, live from ${city}. We are starting with ${nextTitle}. Stay close.`,
-        songTalk: previousTrack
-          ? `${activeDj.name} here. That was ${previousTitle}, and up next we have ${nextTitle} on a ${contextRef.current.weather.toLowerCase()} day in ${city}.`
-          : `${activeDj.name} here. Up next we have ${nextTitle} on a ${contextRef.current.weather.toLowerCase()} day in ${city}.`,
-        newsWeather: `Quick check-in from ${city}: ${contextRef.current.weather}. ${contextRef.current.headlines[0] || 'More music straight ahead.'} Now back to it with ${nextTitle}.`,
-        commercial: `This hour of Airbreak comes courtesy of Needle Drop Coffee, keeping the control room awake since forever. Back to the music with ${nextTitle}.`,
-        bumper: `Airbreak. ${activeDj.name}. ${city}. More music right now.`,
-        caller: `Just had a listener on the line asking for ${nextTitle} — you got it. This one is for you.`,
-      }
-      const script = scripts[kind] || scripts.songTalk
-      const fallback: BreakPlan = {
-        kind,
-        title: 'Live break',
-        source: 'fallback',
-        tease: `Next: ${nextTitle}`,
-        script,
-        segments: [{ speaker: kind === 'bumper' ? 'imaging' : 'dj', text: script }],
-      }
+      const fallback = makeBackupBreak(index, kind, previousIndex)
       setBufferStatus('Loaded an offline break')
       return fallback
     })
@@ -512,24 +542,55 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
       if (oldest) preloadRef.current.delete(oldest)
     }
     return promise
-  }, [])
+  }, [makeBackupBreak])
+
+  const requestBreakForAir = useCallback(
+    async (index: number, kind: BreakKind, previousIndex?: number) => {
+      const breakPromise = requestBreak(index, kind, previousIndex)
+      let fallbackTimer: number | undefined
+      const backupPromise = new Promise<BreakPlan>((resolve) => {
+        fallbackTimer = window.setTimeout(() => {
+          setBufferStatus('Using a live backup break')
+          resolve(makeBackupBreak(index, kind, previousIndex))
+        }, BREAK_GRACE_MS)
+      })
+      const plan = await Promise.race([breakPromise, backupPromise])
+      if (fallbackTimer) window.clearTimeout(fallbackTimer)
+      breakPromise.catch(() => undefined)
+      return plan
+    },
+    [makeBackupBreak, requestBreak],
+  )
 
   // While a song plays, verify the next track is playable and, when the next
-  // transition includes a break, write and voice it immediately.
+  // scheduled transition includes a break, write and voice it as early as we can.
   const prepareNext = useCallback(
     (index: number) => {
       const promise = (async () => {
         const length = Math.max(1, tracksRef.current.length)
-        const nextIndex = await findPlayableIndex((index + 1) % length)
-        if (songsSinceBreakRef.current >= breakEveryRef.current) {
-          requestBreak(nextIndex, selectBreakKind(breakSeqRef.current), index)
-        }
-        return nextIndex
+        return findPlayableIndex((index + 1) % length)
       })()
       promise.catch(() => undefined)
       nextIndexPromiseRef.current = promise
+
+      void (async () => {
+        const nextIndex = await promise
+        const songsUntilBreak = Math.max(0, breakEveryRef.current - songsSinceBreakRef.current)
+        const breakKind = selectBreakKind(breakSeqRef.current)
+        if (songsUntilBreak === 0) {
+          requestBreak(nextIndex, selectBreakKind(breakSeqRef.current), index)
+          return
+        }
+
+        const sequence = await findPlayableSequence(nextIndex, songsUntilBreak + 1)
+        const previousBreakIndex = sequence[songsUntilBreak - 1]
+        const nextBreakIndex = sequence[songsUntilBreak]
+        if (typeof previousBreakIndex === 'number' && typeof nextBreakIndex === 'number') {
+          requestBreak(nextBreakIndex, breakKind, previousBreakIndex)
+        }
+      })()
     },
-    [findPlayableIndex, requestBreak],
+    [findPlayableIndex, findPlayableSequence, requestBreak],
   )
 
   const updateMediaSession = useCallback((track: Track) => {
@@ -613,7 +674,7 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
       phaseRef.current = 'loading'
       setMode('loading')
       setStatus('Cueing the mic')
-      const breakPlan = await requestBreak(index, breakKind, previousIndex)
+      const breakPlan = await requestBreakForAir(index, breakKind, previousIndex)
       if (stopRef.current) return
 
       phaseRef.current = 'break'
@@ -656,7 +717,7 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
       setStatus('On air')
       rampDuck(1, SWELL_MS)
     },
-    [beginSong, playPlanAudio, prepareNext, rampDuck, requestBreak],
+    [beginSong, playPlanAudio, prepareNext, rampDuck, requestBreakForAir],
   )
 
   useEffect(() => {
