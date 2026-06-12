@@ -144,6 +144,13 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
   const rampDuck = useCallback(
     (target: number, ms: number) => {
       if (rampRef.current) cancelAnimationFrame(rampRef.current)
+      // Animation frames do not run with the screen off; jump straight to the
+      // target so the song is not stuck quiet until the phone unlocks.
+      if (document.hidden) {
+        duckRef.current = target
+        applyVolumes()
+        return
+      }
       const from = duckRef.current
       const startedAt = performance.now()
       const step = (now: number) => {
@@ -313,6 +320,9 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
     (url: string, onNearEnd?: () => void) => {
       return new Promise<void>((resolve) => {
         const audio = getBreakAudio()
+        // Mobile browsers suspend the Web Audio context on screen lock; wake
+        // it up so the voice is audible, not silently routed into a dead graph.
+        audioCtxRef.current?.resume().catch(() => undefined)
         audio.onended = () => resolve()
         audio.onerror = () => resolve()
         audio.ontimeupdate = () => {
@@ -718,6 +728,11 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
       audio.play().catch(() => {
         setStatus('Tap play to enable audio')
       })
+      try {
+        if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'
+      } catch {
+        // Optional hint for lock-screen controls.
+      }
     },
     [applyVolumes, getSongAudio, updateMediaSession],
   )
@@ -779,6 +794,20 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
         prepareNext(index)
       }
 
+      // Keep the song element rolling on a silent loop through the dry voice.
+      // If it ever fully stops, mobile browsers tear down background playback
+      // and reject the next play() once the screen is locked.
+      const bed = getSongAudio()
+      bed.onended = null
+      bed.onerror = null
+      bed.loop = true
+      bed.volume = 0
+      if (bed.currentSrc !== silentAudioUrl) {
+        bed.src = silentAudioUrl
+        bed.load()
+      }
+      bed.play().catch(() => undefined)
+
       await playPlanAudio(breakPlan, startSongUnder)
       if (stopRef.current) return
 
@@ -788,7 +817,7 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
       setStatus('On air')
       rampDuck(1, SWELL_MS)
     },
-    [beginSong, playPlanAudio, prepareNext, rampDuck, requestBreakForAir],
+    [beginSong, getSongAudio, playPlanAudio, prepareNext, rampDuck, requestBreakForAir],
   )
 
   useEffect(() => {
@@ -820,6 +849,65 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
   useEffect(() => {
     advanceRef.current = advance
   }, [advance])
+
+  // Self-healing watchdog: mobile browsers reject play() or stall streams
+  // after interruptions (screen lock, phone calls, flaky cell data). Retry
+  // paused audio that should be playing, and skip tracks that stop advancing.
+  const stallRef = useRef({ time: 0, at: 0 })
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      if (stopRef.current) return
+      const phase = phaseRef.current
+      if (phase !== 'song' && phase !== 'break') return
+      audioCtxRef.current?.resume().catch(() => undefined)
+      if (phase === 'song') {
+        const audio = songRef.current
+        if (!audio?.src) return
+        if (audio.paused && !audio.ended) {
+          audio.play().catch(() => undefined)
+          return
+        }
+        const now = Date.now()
+        if (Math.abs(audio.currentTime - stallRef.current.time) > 0.5) {
+          stallRef.current = { time: audio.currentTime, at: now }
+        } else if (stallRef.current.at && now - stallRef.current.at > 45000) {
+          // The stream has been frozen for 45 seconds; move the show along.
+          stallRef.current = { time: 0, at: 0 }
+          if (tracksRef.current[indexRef.current]?.id) {
+            badTracksRef.current.add(tracksRef.current[indexRef.current].id)
+          }
+          advanceRef.current(indexRef.current, countRef.current)
+        }
+      } else {
+        const audio = breakRef.current
+        if (audio?.src && audio.paused && !audio.ended && !window.speechSynthesis?.speaking) {
+          audio.play().catch(() => undefined)
+        }
+      }
+    }, 4000)
+    return () => window.clearInterval(interval)
+  }, [])
+
+  // When the app comes back to the foreground, wake the audio graph and
+  // restart anything an interruption left paused.
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.hidden || stopRef.current) return
+      audioCtxRef.current?.resume().catch(() => undefined)
+      const phase = phaseRef.current
+      if (phase === 'song') {
+        const audio = songRef.current
+        if (audio?.src && audio.paused && !audio.ended) audio.play().catch(() => undefined)
+      } else if (phase === 'break') {
+        const audio = breakRef.current
+        if (audio?.src && audio.paused && !audio.ended && !window.speechSynthesis?.speaking) {
+          audio.play().catch(() => undefined)
+        }
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange)
+  }, [])
 
   // Keep a short, real-voice station liner ready as the emergency on-air bridge.
   useEffect(() => {
@@ -893,6 +981,11 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
     songRef.current?.pause()
     setMode('paused')
     setStatus('Paused')
+    try {
+      if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'
+    } catch {
+      // Optional hint for lock-screen controls.
+    }
   }, [])
 
   const resume = useCallback(() => {
