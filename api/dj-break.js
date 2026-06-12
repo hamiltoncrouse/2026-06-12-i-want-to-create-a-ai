@@ -1,23 +1,30 @@
 const breakKinds = ['intro', 'songTalk', 'newsWeather', 'commercial', 'bumper', 'caller']
+const speakers = ['dj', 'caller', 'reporter', 'imaging']
 
 const kindNotes = {
   intro:
-    'Open the show: welcome listeners, set the vibe for this hour in the DJ\'s voice, then set up the first song.',
+    'Open the show: welcome listeners, set the vibe for this hour in the DJ\'s voice, then set up the first song. One segment, speaker "dj".',
   songTalk:
-    'Back-announce the previous song in a line, then talk up the next one with something specific.',
+    'Back-announce the previous song in a line, then talk up the next one with something specific. One segment, speaker "dj".',
   newsWeather:
-    'A quick local update: the weather right now and the rest of the day in spoken language, then one or two headlines in plain words, then hand it back to the music.',
+    'The DJ tosses to a station colleague, then the colleague (speaker "reporter") introduces themselves by first and last name and their role, delivers the update using only facts from the context (weather and headlines or sports), and tosses back. End with one short "dj" segment reacting and setting up the song. Structure: dj, reporter, dj.',
   commercial:
-    'A 20 to 40 second spot for an obviously fictional local business that fits the city, with a slogan or fictional address. Then hand back to the music.',
+    'A 20 to 40 second spot for an obviously fictional local business that fits the city, with a slogan or fictional address. One segment, speaker "dj". Then hand back to the music.',
   bumper:
-    'A station imaging sweeper, 8 to 20 words maximum: the station name Airbreak, the DJ name or show vibe, straight into the next song. Punchy, no filler.',
+    'A produced station imaging sweeper, 8 to 20 words maximum: the station name Airbreak, the DJ name or show vibe, straight into the next song. One segment, speaker "imaging". Punchy, no filler.',
   caller:
-    'Invent a plausible listener call-in: a first name and a neighborhood or nearby suburb of the station city, requesting the next track or sharing a one-line story about it. Quote the caller briefly, react warmly or wryly, then send it to the song.',
+    'A listener call-in. Structure segments: a short "dj" segment answering the phones, then the "caller" (a plausible first name from a real neighborhood or suburb of the station city) speaking for themselves — requesting the next track or telling a one-line story about it, sounding like a real person on a cell phone — then a short "dj" segment reacting and sending it to the song. Structure: dj, caller, dj.',
 }
+
+const reporterRoles = [
+  'the news desk update',
+  'the Airbreak traffic-copter report from above the city, with plausible but generic road references unless the context names real roads',
+  'the sports desk update, using the sports items from the context',
+]
 
 const angles = [
   'share one true-sounding fact about the artist, the song, or the genre',
-  'connect the moment to the current time of day and what listeners are probably doing',
+  'connect the moment to the current local time of day and what listeners are probably doing',
   'use the weather to paint a quick scene before the next song',
   'pull a small story from the DJ backstory and land it in a line or two',
   'react to one local headline with a single dry line, then pivot to the music',
@@ -37,25 +44,50 @@ function fallbackBreak(body) {
   const weather = context.weather ? `Local weather: ${context.weather}.` : ''
   const headline = context.headlines?.[0] ? `Also watching: ${context.headlines[0]}.` : ''
   const name = dj.name || 'your AI DJ'
-  const city = dj.city || context.city || 'the station'
+  const city = context.city || dj.city || 'the station'
+  const tease = next.title ? `Next: ${next.title}` : 'More music ahead'
 
   if (kind === 'bumper') {
+    const script = `Airbreak. ${name}. ${city}. More music right now.`
     return {
       kind,
       title: 'Station bumper',
-      tease: next.title ? `Next: ${next.title}` : 'More music ahead',
+      tease,
       source: 'fallback',
-      script: `Airbreak. ${name}. ${city}. More music right now.`,
+      script,
+      segments: [{ speaker: 'imaging', text: script }],
     }
   }
 
   if (kind === 'caller') {
+    const callerLine = `Hey, longtime listener! Any chance you can play ${next.title || 'that next one'}${next.artist ? ` by ${next.artist}` : ''}? It has been stuck in my head all day.`
     return {
       kind,
       title: 'Caller request',
-      tease: next.title ? `Next: ${next.title}` : 'More music ahead',
+      tease,
       source: 'fallback',
-      script: `Phones are lit at Airbreak. Just had a listener ask for ${next.title || 'this next one'}${next.artist ? ` by ${next.artist}` : ''} — you got it. This one is going out to you.`,
+      script: `Phones are lit at Airbreak. ${callerLine} You got it — this one is going out to you.`,
+      segments: [
+        { speaker: 'dj', text: 'Phones are lit at Airbreak. Go ahead, you are on the air.' },
+        { speaker: 'caller', text: callerLine },
+        { speaker: 'dj', text: 'You got it — this one is going out to you.' },
+      ],
+    }
+  }
+
+  if (kind === 'newsWeather') {
+    const reporterText = `Thanks! This is Robin Vale at the Airbreak news desk. ${weather || 'Weather is holding steady.'} ${headline || 'A quiet day around town.'} Back to you.`
+    return {
+      kind,
+      title: 'News and weather',
+      tease,
+      source: 'fallback',
+      script: `Time for a quick local check-in. ${reporterText} Thanks Robin — back to the music.`,
+      segments: [
+        { speaker: 'dj', text: 'Time for a quick local check-in.' },
+        { speaker: 'reporter', text: reporterText },
+        { speaker: 'dj', text: 'Thanks Robin — back to the music.' },
+      ],
     }
   }
 
@@ -68,21 +100,24 @@ function fallbackBreak(body) {
       ? `This is ${name} on the desk, broadcasting from ${city}.`
       : `${name} back with you.`
 
+  const script = [
+    intro,
+    current.title ? `We are setting up ${current.title}${current.artist ? ` by ${current.artist}` : ''}.` : '',
+    next.title ? `After that, ${next.title}${next.artist ? ` by ${next.artist}` : ''} is waiting in the rack.` : '',
+    weather,
+    headline,
+    sponsor,
+  ]
+    .filter(Boolean)
+    .join(' ')
+
   return {
     kind,
     title: kind === 'commercial' ? 'Commercial break' : 'DJ break',
-    tease: next.title ? `Next: ${next.title}` : 'More music ahead',
+    tease,
     source: 'fallback',
-    script: [
-      intro,
-      current.title ? `We are setting up ${current.title}${current.artist ? ` by ${current.artist}` : ''}.` : '',
-      next.title ? `After that, ${next.title}${next.artist ? ` by ${next.artist}` : ''} is waiting in the rack.` : '',
-      weather,
-      headline,
-      sponsor,
-    ]
-      .filter(Boolean)
-      .join(' '),
+    script,
+    segments: [{ speaker: 'dj', text: script }],
   }
 }
 
@@ -121,12 +156,13 @@ export default async function handler(req, res) {
 
   const kind = breakKinds.includes(body.kind) ? body.kind : 'songTalk'
   const angle = angles[Math.floor(Math.random() * angles.length)]
+  const reporterRole = reporterRoles[Math.floor(Math.random() * reporterRoles.length)]
   const lengthRule =
     kind === 'bumper'
       ? 'Maximum 20 words.'
       : kind === 'commercial'
-        ? 'Keep it under 80 words.'
-        : 'Keep it under 95 words.'
+        ? 'Keep the whole break under 80 words.'
+        : 'Keep the whole break under 110 words.'
 
   try {
     const response = await fetch('https://api.openai.com/v1/responses', {
@@ -138,14 +174,18 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: process.env.OPENAI_SCRIPT_MODEL || 'gpt-5.4-mini',
         instructions: [
-          'You are the production writer for Airbreak, an AI radio station, writing live on-air copy for one DJ.',
-          'Write compact, spoken DJ breaks that sound live, specific, and human.',
-          'Use the DJ persona and backstory, the station city, the weather, the city facts, the headlines, and the song queue.',
+          'You are the production writer for Airbreak, an AI radio station, writing live on-air copy.',
+          'Write compact, spoken radio that sounds live, specific, and human.',
+          'The station broadcasts from context.city. context.weather, context.headlines, context.sports, context.facts, and localTime are the only sources of local truth — never invent local facts beyond them.',
+          'The DJ persona city is backstory only; the show is local to context.city.',
+          'Return the break as ordered segments, each with a speaker: "dj" for the host, "caller" for a listener on the phone, "reporter" for a station colleague, "imaging" for the produced station voice.',
           `This break is a "${kind}" break. ${kindNotes[kind]}`,
+          kind === 'newsWeather' ? `For this break the reporter segment is ${reporterRole}.` : '',
           kind === 'bumper' ? '' : `Angle for this break: ${angle}.`,
-          'recentScripts contains what the DJ said in the last few breaks: never reuse their opening words, jokes, facts, or sign-offs, and vary sentence rhythm from break to break.',
+          'recentScripts contains what went on air in the last few breaks: never reuse their opening words, jokes, names, or facts, and vary sentence rhythm from break to break.',
           'Do not invent chart positions, dates, deaths, awards, or quotes unless the input makes them clear.',
           'Say numbers and temperatures in spoken form. No markdown. No stage directions. No emoji.',
+          'The script field must be the segments joined in order.',
           lengthRule,
         ]
           .filter(Boolean)
@@ -168,12 +208,24 @@ export default async function handler(req, res) {
             schema: {
               type: 'object',
               additionalProperties: false,
-              required: ['kind', 'title', 'script', 'tease'],
+              required: ['kind', 'title', 'script', 'tease', 'segments'],
               properties: {
                 kind: { type: 'string', enum: breakKinds },
                 title: { type: 'string' },
                 script: { type: 'string' },
                 tease: { type: 'string' },
+                segments: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    additionalProperties: false,
+                    required: ['speaker', 'text'],
+                    properties: {
+                      speaker: { type: 'string', enum: speakers },
+                      text: { type: 'string' },
+                    },
+                  },
+                },
               },
             },
           },

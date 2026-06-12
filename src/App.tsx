@@ -27,6 +27,7 @@ import {
   initials,
   presetDjs,
   selectBreakKind,
+  shuffleTracks,
   splitArtistTitle,
   voiceOptions,
 } from './data'
@@ -68,17 +69,28 @@ function App() {
   })
   const [selectedDjId, setSelectedDjId] = useState(presetDjs[0].id)
   const [context, setContext] = useState<StationContext>(emptyContext)
+  const [contextEpoch, setContextEpoch] = useState(0)
   const [tab, setTab] = useState<Tab>('onair')
   const [folderUrl, setFolderUrl] = useState(defaultFolderUrl)
   const [libraryMessage, setLibraryMessage] = useState('')
   const [scanning, setScanning] = useState(false)
   const [isDjFormOpen, setIsDjFormOpen] = useState(false)
   const [draftDj, setDraftDj] = useState<DjProfile>(blankDraft)
+  const [stationCity, setStationCity] = useState(
+    () => localStorage.getItem('ai-dj-station-city') || '',
+  )
+  const [cityDraft, setCityDraft] = useState(
+    () => localStorage.getItem('ai-dj-station-city') || '',
+  )
+  const [breakEvery, setBreakEvery] = useState(() => {
+    const saved = Number(localStorage.getItem('ai-dj-break-every'))
+    return [1, 2, 3, 5].includes(saved) ? saved : 1
+  })
 
   const djs = [...presetDjs, ...customDjs]
   const selectedDj = djs.find((dj) => dj.id === selectedDjId) || djs[0]
 
-  const station = useStation(selectedDj, context)
+  const station = useStation(selectedDj, context, breakEvery)
   const {
     tracks,
     setLibrary,
@@ -91,7 +103,7 @@ function App() {
     nowScript,
     bufferStatus,
     breakLog,
-    playCount,
+    breakSeq,
     progress,
     volume,
     setVolume,
@@ -108,17 +120,34 @@ function App() {
     const controller = new AbortController()
     async function loadContext() {
       try {
-        const params = new URLSearchParams({ city: selectedDj.city })
+        const params = new URLSearchParams({ city: stationCity || 'auto' })
         const response = await fetch(`/api/context?${params}`, { signal: controller.signal })
         const data = (await response.json()) as StationContext
         setContext(data)
       } catch {
-        setContext({ ...emptyContext, city: selectedDj.city })
+        setContext({ ...emptyContext, city: stationCity || emptyContext.city })
       }
     }
     loadContext()
     return () => controller.abort()
-  }, [selectedDj.city])
+  }, [stationCity, contextEpoch])
+
+  // Keep weather, news, and sports fresh during long listening sessions.
+  useEffect(() => {
+    const interval = window.setInterval(() => setContextEpoch((epoch) => epoch + 1), 10 * 60 * 1000)
+    return () => window.clearInterval(interval)
+  }, [])
+
+  const applyStationCity = useCallback(() => {
+    const next = cityDraft.trim()
+    setStationCity(next)
+    localStorage.setItem('ai-dj-station-city', next)
+  }, [cityDraft])
+
+  const updateBreakEvery = useCallback((value: number) => {
+    setBreakEvery(value)
+    localStorage.setItem('ai-dj-break-every', String(value))
+  }, [])
 
   const handleToggle = useCallback(() => {
     if (isOnAir) pause()
@@ -137,8 +166,8 @@ function App() {
         setLibraryMessage(data.error || 'No playable audio links found')
         return
       }
-      setLibrary(data.tracks)
-      setLibraryMessage(`${data.tracks.length} tracks loaded`)
+      setLibrary(shuffleTracks(data.tracks))
+      setLibraryMessage(`${data.tracks.length} tracks loaded, shuffled`)
     } catch {
       setLibraryMessage('Source scan failed')
     } finally {
@@ -323,6 +352,22 @@ function App() {
                 </span>
               </div>
             )}
+
+            <div className="freqRow">
+              <span className="freqLabel">DJ breaks</span>
+              <div className="freqOptions">
+                {[1, 2, 3, 5].map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={breakEvery === value ? 'freqChip active' : 'freqChip'}
+                    onClick={() => updateBreakEvery(value)}
+                  >
+                    {value === 1 ? 'Every song' : `Every ${value}`}
+                  </button>
+                ))}
+              </div>
+            </div>
           </section>
         )}
 
@@ -532,6 +577,19 @@ function App() {
               </div>
               <p>{context.weather}</p>
               {context.facts && <p className="factsLine">{context.facts}</p>}
+              <div className="cityRow">
+                <input
+                  value={cityDraft}
+                  onChange={(event) => setCityDraft(event.target.value)}
+                  placeholder="Auto-detect my city"
+                  aria-label="Station city"
+                  onKeyDown={(event) => event.key === 'Enter' && applyStationCity()}
+                />
+                <button className="iconButton" type="button" onClick={applyStationCity}>
+                  Set
+                </button>
+              </div>
+              <p className="hintLine">Leave empty to broadcast from your detected location.</p>
             </div>
             <div className="infoCard">
               <div className="infoTitle">
@@ -544,6 +602,16 @@ function App() {
               ).map((headline) => (
                 <p key={headline}>{headline}</p>
               ))}
+              {!!context.sports?.length && (
+                <>
+                  <div className="infoTitle subTitle">
+                    <h3>Sports desk</h3>
+                  </div>
+                  {context.sports.map((item) => (
+                    <p key={item}>{item}</p>
+                  ))}
+                </>
+              )}
             </div>
             <div className="infoCard">
               <div className="infoTitle">
@@ -563,7 +631,7 @@ function App() {
             </div>
             <div className="queueMeta">
               <span>{bufferStatus}</span>
-              <span>Next: {breakKindLabels[selectBreakKind(playCount + 1)]}</span>
+              <span>Next: {breakKindLabels[selectBreakKind(breakSeq)]}</span>
             </div>
           </section>
         )}

@@ -14,13 +14,23 @@ const voices = new Set([
   'cedar',
 ])
 
+const speakerInstructions = {
+  dj: 'Radio DJ delivery. Natural, conversational, tight pacing.',
+  caller:
+    'You are an everyday radio listener calling into a station on your cell phone. Casual, spontaneous, real-person energy, a little informal, slightly excited to be on the air.',
+  reporter:
+    'You are a professional broadcast reporter filing a quick live radio hit. Crisp, fast, authoritative, with a friendly toss back at the end.',
+  imaging:
+    'You are a larger-than-life radio station imaging voice. Deep, dramatic, produced, every word lands hard.',
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' })
     return
   }
 
-  const { text, voice, style } = req.body || {}
+  const { text, voice, style, speaker } = req.body || {}
   if (!text || typeof text !== 'string') {
     res.status(400).json({ error: 'Missing text' })
     return
@@ -42,10 +52,12 @@ export default async function handler(req, res) {
         model: process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts',
         voice: voices.has(voice) ? voice : 'marin',
         input: text.slice(0, 1800),
-        instructions:
-          typeof style === 'string'
-            ? `Radio DJ delivery. Natural, conversational, tight pacing. If the script quotes a caller or another speaker, shift tone subtly for the quoted words. ${style}`
-            : 'Radio DJ delivery. Natural, conversational, tight pacing. If the script quotes a caller or another speaker, shift tone subtly for the quoted words.',
+        instructions: [
+          speakerInstructions[speaker] || speakerInstructions.dj,
+          typeof style === 'string' ? style : '',
+        ]
+          .filter(Boolean)
+          .join(' '),
         response_format: 'mp3',
       }),
     })

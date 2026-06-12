@@ -84,12 +84,9 @@ async function getWeather(coordinates) {
   return parts.join(', ')
 }
 
-async function getFeed(query, limit) {
+async function fetchRss(url, limit) {
   try {
-    const response = await fetch(
-      `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`,
-      { headers: { 'User-Agent': 'Airbreak AI DJ/1.0' } },
-    )
+    const response = await fetch(url, { headers: { 'User-Agent': 'Airbreak AI DJ/1.0' } })
     if (!response.ok) return []
     return extractRssTitles(await response.text(), limit)
   } catch {
@@ -97,12 +94,33 @@ async function getFeed(query, limit) {
   }
 }
 
+function searchFeed(query, limit) {
+  return fetchRss(
+    `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`,
+    limit,
+  )
+}
+
+// Google News' geo section is far more accurate for a place than keyword search.
+function geoFeed(place, limit) {
+  return fetchRss(
+    `https://news.google.com/rss/headlines/section/geo/${encodeURIComponent(place)}?hl=en-US&gl=US&ceid=US:en`,
+    limit,
+  )
+}
+
 async function getHeadlines(city) {
-  const [local, culture] = await Promise.all([
-    getFeed(`${city} local news`, 4),
-    getFeed(`${city} events concerts food sports`, 3),
+  const place = city.split(',')[0].trim() || city
+  const [geo, search] = await Promise.all([
+    geoFeed(place, 5),
+    searchFeed(`"${place}" local news when:2d`, 4),
   ])
-  return [...new Set([...local, ...culture])].slice(0, 6)
+  return [...new Set([...geo, ...search])].slice(0, 6)
+}
+
+function getSports(city) {
+  const place = city.split(',')[0].trim() || city
+  return searchFeed(`"${place}" sports when:2d`, 3)
 }
 
 async function getCityFacts(coordinates, city) {
@@ -122,23 +140,44 @@ async function getCityFacts(coordinates, city) {
   }
 }
 
+// Vercel forwards the caller's IP geolocation; use it when no city is chosen
+// so the station is local to the listener by default.
+function detectListenerCity(req) {
+  const rawCity = req.headers['x-vercel-ip-city']
+  if (!rawCity || typeof rawCity !== 'string') return null
+  const cityName = decodeURIComponent(rawCity)
+  const rawRegion = req.headers['x-vercel-ip-country-region']
+  const region = typeof rawRegion === 'string' ? decodeURIComponent(rawRegion) : ''
+  return {
+    city: region ? `${cityName}, ${region}` : cityName,
+    timezone:
+      typeof req.headers['x-vercel-ip-timezone'] === 'string'
+        ? req.headers['x-vercel-ip-timezone']
+        : '',
+  }
+}
+
 export default async function handler(req, res) {
-  const city =
-    typeof req.query.city === 'string' ? req.query.city.replace(/\+/g, ' ') : 'New York, NY'
+  const requested =
+    typeof req.query.city === 'string' ? req.query.city.replace(/\+/g, ' ').trim() : ''
+  const detected = !requested || requested === 'auto' ? detectListenerCity(req) : null
+  const city = detected?.city || (requested && requested !== 'auto' ? requested : 'New York, NY')
 
   try {
     const coordinates = await getCoordinates(city)
-    const [weather, headlines, facts] = await Promise.all([
+    const [weather, headlines, sports, facts] = await Promise.all([
       getWeather(coordinates),
       getHeadlines(city),
+      getSports(city),
       getCityFacts(coordinates, city),
     ])
     res.status(200).json({
       city,
       weather,
       headlines,
+      sports,
       facts,
-      timezone: coordinates?.timezone || '',
+      timezone: detected?.timezone || coordinates?.timezone || '',
       generatedAt: new Date().toISOString(),
     })
   } catch {
@@ -146,8 +185,9 @@ export default async function handler(req, res) {
       city,
       weather: 'Weather unavailable',
       headlines: [],
+      sports: [],
       facts: '',
-      timezone: '',
+      timezone: detected?.timezone || '',
       generatedAt: new Date().toISOString(),
     })
   }

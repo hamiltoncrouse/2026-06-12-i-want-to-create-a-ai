@@ -153,6 +153,31 @@ export function initials(name: string) {
     .join('')
 }
 
+export function shuffleTracks<T>(list: T[]): T[] {
+  const next = [...list]
+  for (let i = next.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[next[i], next[j]] = [next[j], next[i]]
+  }
+  return next
+}
+
+function seedHash(seed: string) {
+  let hash = 0
+  for (const char of seed) hash = (hash * 31 + char.charCodeAt(0)) >>> 0
+  return hash
+}
+
+export function pickCompanionVoice(exclude: VoiceName | VoiceName[], seed: string): VoiceName {
+  const excluded = new Set(Array.isArray(exclude) ? exclude : [exclude])
+  const pool = voiceOptions.filter((voice) => !excluded.has(voice))
+  return pool[seedHash(seed) % pool.length] || voiceOptions[0]
+}
+
+export function imagingVoice(djVoice: VoiceName): VoiceName {
+  return djVoice === 'onyx' ? 'ash' : 'onyx'
+}
+
 export function formatTime(seconds: number) {
   if (!Number.isFinite(seconds) || seconds <= 0) return '0:00'
   const minutes = Math.floor(seconds / 60)

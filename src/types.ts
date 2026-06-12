@@ -37,6 +37,7 @@ export type StationContext = {
   city: string
   weather: string
   headlines: string[]
+  sports?: string[]
   facts?: string
   timezone?: string
   generatedAt: string
@@ -50,11 +51,20 @@ export type BreakKind =
   | 'bumper'
   | 'caller'
 
+export type BreakSpeaker = 'dj' | 'caller' | 'reporter' | 'imaging'
+
+export type BreakSegment = {
+  speaker: BreakSpeaker
+  text: string
+  audioUrl?: string
+}
+
 export type BreakPlan = {
   kind: BreakKind
   title: string
   script: string
   tease: string
+  segments?: BreakSegment[]
   audioUrl?: string
   source: 'openai' | 'fallback'
 }

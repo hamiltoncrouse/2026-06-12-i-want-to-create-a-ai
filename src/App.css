@@ -496,6 +496,72 @@ input[type='range']:disabled::-webkit-slider-thumb {
   text-overflow: ellipsis;
 }
 
+.freqRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 15px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
+}
+
+.freqLabel {
+  flex: 0 0 auto;
+  color: var(--dj);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.freqOptions {
+  display: flex;
+  gap: 6px;
+  flex: 1;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.freqChip {
+  padding: 6px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.freqChip.active {
+  color: #0c0d10;
+  background: var(--dj);
+  border-color: var(--dj);
+}
+
+.cityRow {
+  display: flex;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.cityRow .iconButton {
+  width: auto;
+  padding: 0 16px;
+  font-weight: 700;
+}
+
+.hintLine {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.subTitle {
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+}
+
 /* ---------- DJs ---------- */
 
 .djList {
