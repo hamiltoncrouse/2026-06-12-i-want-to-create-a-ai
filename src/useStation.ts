@@ -18,13 +18,14 @@ const silentAudioUrl =
 const DUCK_LEVEL = 0.25
 const SWELL_MS = 1500
 const TALKUP_OVERLAP_S = 5
-// Approximate spoken pace used to time the overlap for browser-speech breaks.
+// Approximate spoken pace used to time the overlap when no voiced audio exists.
 const SPOKEN_WORDS_PER_SECOND = 2.6
 // Give slow networks the benefit of the doubt when probing tracks.
 const PROBE_TIMEOUT_MS = 8000
-// At an actual transition, silence is worse than a less polished break. If the
-// preloaded cloud voice is still pending, fall back to browser speech quickly.
+// If the full break is still pending at a transition, use the short pre-voiced
+// liner instead of a synthetic browser-speech fallback.
 const BREAK_GRACE_MS = 900
+const STANDBY_CALLSIGN = 'W I C H'
 
 export type StationMode = 'idle' | 'loading' | 'break' | 'song' | 'paused'
 
@@ -75,6 +76,7 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
   const rampRef = useRef<number | null>(null)
   const recentScriptsRef = useRef<string[]>([])
   const preloadRef = useRef<Map<string, Promise<BreakPlan>>>(new Map())
+  const standbyLinerRef = useRef<Map<string, Promise<BreakPlan | null>>>(new Map())
   const goodTracksRef = useRef<Set<string>>(new Set())
   const badTracksRef = useRef<Set<string>>(new Set())
   const nextIndexPromiseRef = useRef<Promise<number> | null>(null)
@@ -363,6 +365,51 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
     [playAudioUrl, playStinger, setVoiceEffect, speakFallback],
   )
 
+  const hasVoicedAudio = useCallback((plan: BreakPlan) => {
+    return Boolean(plan.audioUrl || plan.segments?.some((segment) => segment.audioUrl))
+  }, [])
+
+  const requestStandbyLiner = useCallback(() => {
+    const activeDj = djRef.current
+    const key = `${activeDj.id}:${activeDj.voice}:${activeDj.style}`
+    const existing = standbyLinerRef.current.get(key)
+    if (existing) return existing
+
+    const text = `You're listening to ${activeDj.name} on ${STANDBY_CALLSIGN}. Keep listening.`
+    const promise = (async (): Promise<BreakPlan | null> => {
+      const voiceResponse = await fetch('/api/voice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text,
+          voice: activeDj.voice,
+          speaker: 'dj',
+          style: activeDj.style,
+        }),
+      })
+      if (!voiceResponse.ok || !voiceResponse.headers.get('content-type')?.includes('audio')) {
+        return null
+      }
+      const blob = await voiceResponse.blob()
+      const audioUrl = URL.createObjectURL(blob)
+      return {
+        kind: 'bumper',
+        title: 'Standby liner',
+        source: 'fallback',
+        tease: 'Keep listening',
+        script: text,
+        segments: [{ speaker: 'dj', text, audioUrl }],
+      }
+    })().catch(() => null)
+
+    standbyLinerRef.current.set(key, promise)
+    if (standbyLinerRef.current.size > 4) {
+      const oldest = standbyLinerRef.current.keys().next().value
+      if (oldest) standbyLinerRef.current.delete(oldest)
+    }
+    return promise
+  }, [])
+
   const probeTrack = useCallback((track: Track) => {
     if (goodTracksRef.current.has(track.id)) return Promise.resolve(true)
     if (badTracksRef.current.has(track.id)) return Promise.resolve(false)
@@ -547,19 +594,42 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
   const requestBreakForAir = useCallback(
     async (index: number, kind: BreakKind, previousIndex?: number) => {
       const breakPromise = requestBreak(index, kind, previousIndex)
+      const standbyPromise = requestStandbyLiner()
       let fallbackTimer: number | undefined
-      const backupPromise = new Promise<BreakPlan>((resolve) => {
+      const gracePromise = new Promise<'grace'>((resolve) => {
         fallbackTimer = window.setTimeout(() => {
-          setBufferStatus('Using a live backup break')
-          resolve(makeBackupBreak(index, kind, previousIndex))
+          resolve('grace')
         }, BREAK_GRACE_MS)
       })
-      const plan = await Promise.race([breakPromise, backupPromise])
+
+      const result = await Promise.race([breakPromise, gracePromise])
       if (fallbackTimer) window.clearTimeout(fallbackTimer)
+
+      if (result !== 'grace') {
+        if (hasVoicedAudio(result)) return result
+        const standby = await standbyPromise
+        return standby || result
+      }
+
+      const backupResult = await Promise.race([
+        standbyPromise.then((plan) => ({ type: 'standby' as const, plan })),
+        breakPromise.then((plan) => ({ type: 'break' as const, plan })),
+      ])
+
+      if (backupResult.type === 'standby' && backupResult.plan) {
+        setBufferStatus('Using the standby liner')
+        breakPromise.catch(() => undefined)
+        return backupResult.plan
+      }
+
+      if (backupResult.type === 'break') return backupResult.plan
+
+      setBufferStatus('Waiting for the voiced break')
+      const plan = await breakPromise
       breakPromise.catch(() => undefined)
       return plan
     },
-    [makeBackupBreak, requestBreak],
+    [hasVoicedAudio, requestBreak, requestStandbyLiner],
   )
 
   // While a song plays, verify the next track is playable and, when the next
@@ -750,6 +820,12 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
     advanceRef.current = advance
   }, [advance])
 
+  // Keep a short, real-voice station liner ready as the emergency on-air bridge.
+  useEffect(() => {
+    if (mode !== 'idle') return
+    requestStandbyLiner()
+  }, [mode, dj.id, requestStandbyLiner])
+
   // Warm the opening break (script + voice) while the station is idle so
   // pressing Start goes straight to air with no dead time. Re-warms when the
   // DJ, library, or station context changes; the cache dedupes repeats.
@@ -770,6 +846,7 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
       return
     }
     ensureAudioGraph()
+    requestStandbyLiner()
     // Prime both elements inside the user gesture so later src swaps autoplay.
     const breakAudio = getBreakAudio()
     breakAudio.loop = true
@@ -798,7 +875,14 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
       setCurrentIndex(startIndex)
       playBreakThenSong(startIndex, 0)
     })()
-  }, [ensureAudioGraph, findPlayableIndex, getBreakAudio, getSongAudio, playBreakThenSong])
+  }, [
+    ensureAudioGraph,
+    findPlayableIndex,
+    getBreakAudio,
+    getSongAudio,
+    playBreakThenSong,
+    requestStandbyLiner,
+  ])
 
   const pause = useCallback(() => {
     stopRef.current = true
@@ -827,6 +911,7 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
 
   const skip = useCallback(() => {
     if (!tracksRef.current.length) return
+    const previousIndex = phaseRef.current === 'song' ? indexRef.current : undefined
     stopRef.current = true
     if (rampRef.current) cancelAnimationFrame(rampRef.current)
     window.speechSynthesis?.cancel()
@@ -841,7 +926,7 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
         (indexRef.current + 1) % Math.max(1, tracksRef.current.length),
       )
       if (stopRef.current) return
-      playBreakThenSong(nextIndex, nextCount)
+      playBreakThenSong(nextIndex, nextCount, previousIndex)
     })()
   }, [findPlayableIndex, playBreakThenSong])
 
@@ -854,6 +939,7 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
         phaseRef.current = 'idle'
         return
       }
+      const previousIndex = phaseRef.current === 'song' ? indexRef.current : undefined
       stopRef.current = true
       if (rampRef.current) cancelAnimationFrame(rampRef.current)
       window.speechSynthesis?.cancel()
@@ -863,7 +949,7 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
       countRef.current = nextCount
       setPlayCount(nextCount)
       stopRef.current = false
-      playBreakThenSong(index, nextCount)
+      playBreakThenSong(index, nextCount, previousIndex)
     },
     [mode, playBreakThenSong],
   )
