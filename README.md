@@ -1,14 +1,20 @@
-# Airbreak AI DJ
+# Airbreak — AI Radio DJ
 
-Airbreak is a Vercel-hosted AI DJ desk. It can load a music manifest, accept local audio files, run preset or custom virtual DJs, generate live station breaks, and synthesize those breaks as DJ voice audio through OpenAI.
+Airbreak is your personal AI radio station, built as a mobile-first web app and hosted on Vercel. Pick a virtual DJ, load your music, and go live: the host writes and voices station breaks on the fly, talks over a music bed like real radio, and works your local weather and headlines into the show.
 
 ## Features
 
+- Mobile-first app UI with bottom tab navigation (On Air / DJs / Library / Station), installable as a PWA.
+- Live radial audio visualizer around the vinyl — real waveform data while the DJ talks, ambient animation during songs.
+- Real-radio ducking: songs start as a quiet bed under the DJ's voice, then swell to full volume.
+- Per-DJ theming: the whole app re-colors to match the selected host.
 - Preset virtual DJs with voice, format, style, city, and backstory.
-- Custom DJ creation stored in browser local storage.
+- Custom DJ creation (with color and voice picker) stored in browser local storage.
 - Shared cloud music loading from JSON manifests or browsable HTML folders.
 - Local audio loading with browser object URLs.
+- Seek bar, volume control, true pause/resume, and lock-screen controls via the Media Session API.
 - Live weather via Open-Meteo and local headlines via Google News RSS.
+- Break log with every script the station has aired.
 - Preloaded AI breaks before songs end to reduce dead air.
 - Server-only OpenAI script and TTS routes.
 - Browser speech fallback when `OPENAI_API_KEY` is not configured.
