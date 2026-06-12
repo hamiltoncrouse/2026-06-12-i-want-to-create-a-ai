@@ -37,10 +37,18 @@ export type StationContext = {
   city: string
   weather: string
   headlines: string[]
+  facts?: string
+  timezone?: string
   generatedAt: string
 }
 
-export type BreakKind = 'intro' | 'songTalk' | 'newsWeather' | 'commercial'
+export type BreakKind =
+  | 'intro'
+  | 'songTalk'
+  | 'newsWeather'
+  | 'commercial'
+  | 'bumper'
+  | 'caller'
 
 export type BreakPlan = {
   kind: BreakKind

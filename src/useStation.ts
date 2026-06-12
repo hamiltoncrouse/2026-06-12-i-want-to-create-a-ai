@@ -5,9 +5,13 @@ import type { BreakKind, BreakPlan, DjProfile, StationContext, Track } from './t
 const silentAudioUrl =
   'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQQAAAAAAA=='
 
-// Songs play as a quiet bed under the DJ's voice, then swell to full volume.
-const DUCK_LEVEL = 0.22
-const SWELL_MS = 2000
+// The DJ speaks dry; the next song fades in under the final seconds of the
+// talk-up, then swells to full volume when the voice ends.
+const DUCK_LEVEL = 0.25
+const SWELL_MS = 1500
+const TALKUP_OVERLAP_S = 5
+// Approximate spoken pace used to time the overlap for browser-speech breaks.
+const SPOKEN_WORDS_PER_SECOND = 2.6
 
 export type StationMode = 'idle' | 'loading' | 'break' | 'song' | 'paused'
 
@@ -44,7 +48,7 @@ export function useStation(dj: DjProfile, context: StationContext) {
   const masterRef = useRef(1)
   const duckRef = useRef(1)
   const rampRef = useRef<number | null>(null)
-  const scriptRef = useRef('')
+  const recentScriptsRef = useRef<string[]>([])
   const preloadRef = useRef<Map<string, Promise<BreakPlan>>>(new Map())
   const preloadStartedRef = useRef<string | null>(null)
   const chainRef = useRef<(index: number, count: number) => Promise<void>>(async () => undefined)
@@ -156,11 +160,15 @@ export function useStation(dj: DjProfile, context: StationContext) {
   }, [])
 
   const playAudioUrl = useCallback(
-    (url: string) => {
+    (url: string, onNearEnd?: () => void) => {
       return new Promise<void>((resolve) => {
         const audio = getBreakAudio()
         audio.onended = () => resolve()
         audio.onerror = () => resolve()
+        audio.ontimeupdate = () => {
+          const remaining = audio.duration - audio.currentTime
+          if (Number.isFinite(remaining) && remaining <= TALKUP_OVERLAP_S) onNearEnd?.()
+        }
         audio.loop = false
         audio.volume = masterRef.current
         audio.src = url
@@ -191,7 +199,7 @@ export function useStation(dj: DjProfile, context: StationContext) {
           currentTrack: track,
           nextTrack: upcomingTrack,
           queue: activeTracks.slice(index, index + 6),
-          recentScript: scriptRef.current,
+          recentScripts: recentScriptsRef.current,
         }),
       })
       const plan = (await breakResponse.json()) as BreakPlan
@@ -215,12 +223,22 @@ export function useStation(dj: DjProfile, context: StationContext) {
       setBufferStatus('Next break is loaded')
       return plan
     })().catch((): BreakPlan => {
+      const dj = djRef.current
+      const nextTitle = upcomingTrack?.title || 'another cut'
+      const scripts: Record<BreakKind, string> = {
+        intro: `${dj.name} on Airbreak, live from ${dj.city}. We are starting with ${nextTitle}. Stay close.`,
+        songTalk: `${dj.name} here. That was ${track?.title || 'the last track'}, and up next we have ${nextTitle} on a ${contextRef.current.weather.toLowerCase()} day in ${dj.city}.`,
+        newsWeather: `Quick check-in from ${dj.city}: ${contextRef.current.weather}. ${contextRef.current.headlines[0] || 'More music straight ahead.'} Now back to it with ${nextTitle}.`,
+        commercial: `This hour of Airbreak comes courtesy of Needle Drop Coffee, keeping the control room awake since forever. Back to the music with ${nextTitle}.`,
+        bumper: `Airbreak. ${dj.name}. ${dj.city}. More music right now.`,
+        caller: `Just had a listener on the line asking for ${nextTitle} — you got it. This one is for you.`,
+      }
       const fallback: BreakPlan = {
         kind,
         title: 'Live break',
         source: 'fallback',
-        tease: 'Fallback script',
-        script: `${djRef.current.name} here. That was ${track?.title || 'the last track'}, and up next we have ${upcomingTrack?.title || 'another cut'} on a ${contextRef.current.weather.toLowerCase()} day in ${djRef.current.city}.`,
+        tease: `Next: ${nextTitle}`,
+        script: scripts[kind] || scripts.songTalk,
       }
       setBufferStatus('Loaded an offline break')
       return fallback
@@ -255,8 +273,6 @@ export function useStation(dj: DjProfile, context: StationContext) {
       const audio = getSongAudio()
       const track = tracksRef.current[index]
       if (!track) return
-      indexRef.current = index
-      setCurrentIndex(index)
       audio.onended = () => {
         if (stopRef.current) return
         const nextIndex = (index + 1) % tracksRef.current.length
@@ -278,18 +294,6 @@ export function useStation(dj: DjProfile, context: StationContext) {
           time: audio.currentTime,
           duration: Number.isFinite(audio.duration) ? audio.duration : 0,
         })
-        const remaining = audio.duration - audio.currentTime
-        const nextIndex = (index + 1) % tracksRef.current.length
-        const nextKind = selectBreakKind(count + 1)
-        const preloadKey = `${nextIndex}:${nextKind}`
-        if (
-          Number.isFinite(remaining) &&
-          remaining < 45 &&
-          preloadStartedRef.current !== preloadKey
-        ) {
-          preloadStartedRef.current = preloadKey
-          requestBreak(nextIndex, nextKind)
-        }
       }
       audio.loop = false
       duckRef.current = DUCK_LEVEL
@@ -308,7 +312,7 @@ export function useStation(dj: DjProfile, context: StationContext) {
         setStatus('Tap play to enable audio')
       })
     },
-    [applyVolumes, getSongAudio, requestBreak, updateMediaSession],
+    [applyVolumes, getSongAudio, updateMediaSession],
   )
 
   const playBreakThenSong = useCallback(
@@ -327,7 +331,7 @@ export function useStation(dj: DjProfile, context: StationContext) {
       setMode('break')
       setStatus('On the mic')
       setNowScript(breakPlan.script)
-      scriptRef.current = breakPlan.script
+      recentScriptsRef.current = [...recentScriptsRef.current, breakPlan.script].slice(-3)
       setBreakLog((prev) =>
         [
           {
@@ -338,22 +342,47 @@ export function useStation(dj: DjProfile, context: StationContext) {
           ...prev,
         ].slice(0, 12),
       )
+      indexRef.current = index
+      setCurrentIndex(index)
+      setProgress({ time: 0, duration: 0 })
       preloadStartedRef.current = null
 
-      // Start the song as a quiet bed under the voice, real-radio style.
-      beginSong(index, count)
+      // The DJ speaks dry; the song fades in under the last seconds of the talk.
+      let songStarted = false
+      const startSongUnder = () => {
+        if (songStarted || stopRef.current) return
+        songStarted = true
+        beginSong(index, count)
+      }
 
       if (breakPlan.audioUrl) {
-        await playAudioUrl(breakPlan.audioUrl)
+        await playAudioUrl(breakPlan.audioUrl, startSongUnder)
       } else {
+        const words = breakPlan.script.split(/\s+/).length
+        const overlapDelay = Math.max(
+          0,
+          (words / SPOKEN_WORDS_PER_SECOND - TALKUP_OVERLAP_S) * 1000,
+        )
+        const overlapTimer = window.setTimeout(startSongUnder, overlapDelay)
         await speakFallback(breakPlan.script)
+        window.clearTimeout(overlapTimer)
       }
       if (stopRef.current) return
 
+      startSongUnder()
       phaseRef.current = 'song'
       setMode('song')
       setStatus('On air')
       rampDuck(1, SWELL_MS)
+
+      // Write and voice the next break right away so it is never late.
+      const nextIndex = (index + 1) % tracksRef.current.length
+      const nextKind = selectBreakKind(count + 1)
+      const preloadKey = `${nextIndex}:${nextKind}`
+      if (preloadStartedRef.current !== preloadKey) {
+        preloadStartedRef.current = preloadKey
+        requestBreak(nextIndex, nextKind)
+      }
     },
     [beginSong, playAudioUrl, rampDuck, requestBreak, speakFallback],
   )
@@ -361,6 +390,20 @@ export function useStation(dj: DjProfile, context: StationContext) {
   useEffect(() => {
     chainRef.current = playBreakThenSong
   }, [playBreakThenSong])
+
+  // Warm the opening break (script + voice) while the station is idle so
+  // pressing Start goes straight to air with no dead time. Re-warms when the
+  // DJ, library, or station context changes; the cache dedupes repeats.
+  useEffect(() => {
+    if (mode !== 'idle' || !tracks.length) return
+    const timer = window.setTimeout(
+      () => {
+        requestBreak(indexRef.current, selectBreakKind(countRef.current))
+      },
+      context.generatedAt ? 300 : 4000,
+    )
+    return () => window.clearTimeout(timer)
+  }, [mode, tracks, currentIndex, dj.id, context.generatedAt, requestBreak])
 
   const start = useCallback(() => {
     if (!tracksRef.current.length) {

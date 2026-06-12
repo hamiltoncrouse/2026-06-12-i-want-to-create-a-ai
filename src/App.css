@@ -827,6 +827,13 @@ textarea {
   letter-spacing: -0.01em;
 }
 
+.factsLine {
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
 .logEntry {
   display: grid;
   gap: 6px;

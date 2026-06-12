@@ -44,8 +44,8 @@ export default async function handler(req, res) {
         input: text.slice(0, 1800),
         instructions:
           typeof style === 'string'
-            ? `Radio DJ delivery. Natural, conversational, tight pacing. ${style}`
-            : 'Radio DJ delivery. Natural, conversational, tight pacing.',
+            ? `Radio DJ delivery. Natural, conversational, tight pacing. If the script quotes a caller or another speaker, shift tone subtly for the quoted words. ${style}`
+            : 'Radio DJ delivery. Natural, conversational, tight pacing. If the script quotes a caller or another speaker, shift tone subtly for the quoted words.',
         response_format: 'mp3',
       }),
     })

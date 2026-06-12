@@ -106,6 +106,8 @@ export const breakKindLabels: Record<BreakKind, string> = {
   songTalk: 'Song talk',
   newsWeather: 'News & weather',
   commercial: 'Sponsor spot',
+  bumper: 'Station bumper',
+  caller: 'Caller request',
 }
 
 export function formatTrackName(name: string) {
@@ -125,11 +127,21 @@ export function splitArtistTitle(name: string) {
   return { artist: 'Unknown Artist', title: cleaned || 'Untitled Track' }
 }
 
+// A real-station clock: song talk, sweepers, spots, calls, and news rotate.
+const breakRotation: BreakKind[] = [
+  'songTalk',
+  'bumper',
+  'commercial',
+  'caller',
+  'songTalk',
+  'newsWeather',
+  'bumper',
+  'songTalk',
+]
+
 export function selectBreakKind(playCount: number): BreakKind {
   if (playCount === 0) return 'intro'
-  if (playCount > 0 && playCount % 5 === 0) return 'newsWeather'
-  if (playCount > 0 && playCount % 4 === 0) return 'commercial'
-  return 'songTalk'
+  return breakRotation[(playCount - 1) % breakRotation.length]
 }
 
 export function initials(name: string) {

@@ -6,7 +6,11 @@ Airbreak is your personal AI radio station, built as a mobile-first web app and 
 
 - Mobile-first app UI with bottom tab navigation (On Air / DJs / Library / Station), installable as a PWA.
 - Live radial audio visualizer around the vinyl — real waveform data while the DJ talks, ambient animation during songs.
-- Real-radio ducking: songs start as a quiet bed under the DJ's voice, then swell to full volume.
+- Real-radio talk-ups: the DJ speaks dry, the next song fades in under the last five seconds of the talk, then swells to full volume.
+- A real station clock: song talk, station bumpers, fictional commercials, listener call-in requests, and news & weather rotate between songs.
+- Zero dead air: the opening break is written and voiced while the station is idle, and the next break is produced as soon as a song starts.
+- The station playlist loads automatically on launch from the default manifest.
+- City research for local color: current conditions and today's range from Open-Meteo, two Google News feeds (local news plus events/sports/food), and city background from Wikipedia.
 - Per-DJ theming: the whole app re-colors to match the selected host.
 - Preset virtual DJs with voice, format, style, city, and backstory.
 - Custom DJ creation (with color and voice picker) stored in browser local storage.

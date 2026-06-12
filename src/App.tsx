@@ -16,7 +16,7 @@ import {
   Upload,
   Volume2,
 } from 'lucide-react'
-import { type CSSProperties, useCallback, useEffect, useState } from 'react'
+import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
 import {
   breakKindLabels,
@@ -145,6 +145,14 @@ function App() {
       setScanning(false)
     }
   }, [folderUrl, setLibrary])
+
+  // Load the station playlist automatically so the app opens ready to play.
+  const autoLoadedRef = useRef(false)
+  useEffect(() => {
+    if (autoLoadedRef.current) return
+    autoLoadedRef.current = true
+    loadFolder()
+  }, [loadFolder])
 
   const addLocalFiles = useCallback(
     (files: FileList | null) => {
@@ -523,6 +531,7 @@ function App() {
                 <h3>{context.city}</h3>
               </div>
               <p>{context.weather}</p>
+              {context.facts && <p className="factsLine">{context.facts}</p>}
             </div>
             <div className="infoCard">
               <div className="infoTitle">
