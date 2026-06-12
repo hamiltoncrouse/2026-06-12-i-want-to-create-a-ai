@@ -1,0 +1,523 @@
+.appShell {
+  --panel: #171a1f;
+  --panel-2: #20242b;
+  --panel-3: #252b32;
+  --ink: #f3f1e8;
+  --muted: #a9b0b7;
+  --line: #3a414b;
+  --dj-color: #f45d48;
+  min-height: 100svh;
+  padding: 24px;
+  background:
+    linear-gradient(135deg, rgba(244, 93, 72, 0.16), transparent 30%),
+    linear-gradient(215deg, rgba(31, 157, 138, 0.14), transparent 34%),
+    #101216;
+  color: var(--ink);
+}
+
+.topBar,
+.consoleGrid,
+.workbench,
+.customPanel {
+  width: min(1420px, 100%);
+  margin: 0 auto;
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 18px;
+}
+
+.brandLockup,
+.hostCard,
+.sectionTitle,
+.signalPill,
+.transportBar,
+.folderRow,
+.fileDrop,
+.queueMeta,
+.headlineList {
+  display: flex;
+  align-items: center;
+}
+
+.brandLockup {
+  gap: 13px;
+}
+
+.brandMark,
+.hostAvatar {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 8px;
+  background: var(--dj-color);
+  color: #111;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 30px;
+  line-height: 1;
+  font-weight: 750;
+}
+
+h2 {
+  font-size: 22px;
+  line-height: 1.1;
+  font-weight: 720;
+}
+
+.topBar p,
+.deckHeader p,
+.hostCard p,
+.personaBlock p,
+.smallStatus,
+.weatherLine,
+.headlineList p,
+.sourceBadge,
+.queueMeta {
+  color: var(--muted);
+}
+
+.signalPill {
+  min-height: 38px;
+  gap: 9px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 14px;
+}
+
+.signalDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #69717c;
+}
+
+.signalDot.live {
+  background: #34d17d;
+  box-shadow: 0 0 0 6px rgba(52, 209, 125, 0.12);
+}
+
+.consoleGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(320px, 0.9fr);
+  gap: 18px;
+}
+
+.deckPanel,
+.hostPanel,
+.libraryPanel,
+.scriptPanel,
+.localPanel,
+.customPanel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(23, 26, 31, 0.92);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.24);
+}
+
+.deckPanel {
+  padding: 22px;
+  min-height: 460px;
+}
+
+.deckHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.eyebrow,
+label span,
+.personaBlock span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--dj-color);
+  font-size: 12px;
+  font-weight: 760;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.sourceBadge {
+  align-self: flex-start;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-2);
+  font-size: 13px;
+}
+
+.visualDeck {
+  display: grid;
+  grid-template-columns: minmax(260px, 440px) minmax(120px, 1fr);
+  align-items: center;
+  gap: 30px;
+  min-height: 310px;
+  margin: 16px 0 8px;
+}
+
+.record {
+  position: relative;
+  aspect-ratio: 1;
+  width: min(100%, 430px);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at center, #e6d6ad 0 9%, #292d33 9.5% 12%, transparent 12.5%),
+    repeating-radial-gradient(circle, #111418 0 8px, #1c2026 9px 11px);
+  box-shadow:
+    inset 0 0 0 12px #090b0d,
+    0 24px 70px rgba(0, 0, 0, 0.4);
+}
+
+.record::before {
+  content: '';
+  position: absolute;
+  inset: 15%;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: inherit;
+}
+
+.record.spinning {
+  animation: spin 8s linear infinite;
+}
+
+.recordLabel {
+  position: absolute;
+  inset: 38%;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--dj-color);
+  color: #141414;
+}
+
+.vuStack {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 9px;
+  align-items: end;
+  height: 240px;
+  padding: 18px;
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.vuStack span {
+  min-height: 28px;
+  border-radius: 4px;
+  background: linear-gradient(#f6d15f, #30c48d);
+  transform-origin: bottom;
+  animation: meter 1.2s ease-in-out infinite alternate;
+}
+
+.vuStack span:nth-child(3n) {
+  animation-duration: 0.8s;
+}
+
+.vuStack span:nth-child(4n) {
+  animation-duration: 1.5s;
+}
+
+.transportBar {
+  gap: 12px;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.primaryButton,
+.secondaryButton,
+.iconButton,
+.trackRow,
+.fileDrop {
+  border: 1px solid var(--line);
+  color: var(--ink);
+  background: var(--panel-2);
+}
+
+.primaryButton,
+.secondaryButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 8px;
+  font-weight: 720;
+}
+
+.primaryButton {
+  border-color: color-mix(in srgb, var(--dj-color) 70%, var(--line));
+  background: var(--dj-color);
+  color: #111;
+}
+
+.secondaryButton {
+  width: 100%;
+  margin-top: 18px;
+}
+
+.iconButton {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+}
+
+audio {
+  width: min(560px, 100%);
+  height: 44px;
+  accent-color: var(--dj-color);
+}
+
+.hostPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px;
+}
+
+.hostCard {
+  gap: 14px;
+}
+
+label {
+  display: block;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #111419;
+  color: var(--ink);
+}
+
+textarea {
+  min-height: 92px;
+  resize: vertical;
+}
+
+.personaBlock {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.workbench {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.95fr) minmax(0, 1.25fr) minmax(270px, 0.8fr);
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.libraryPanel,
+.scriptPanel,
+.localPanel,
+.customPanel {
+  padding: 18px;
+}
+
+.sectionTitle {
+  gap: 9px;
+  margin-bottom: 14px;
+}
+
+.folderRow {
+  gap: 8px;
+}
+
+.fileDrop {
+  justify-content: center;
+  gap: 9px;
+  min-height: 48px;
+  margin: 12px 0;
+  border-style: dashed;
+  border-radius: 8px;
+}
+
+.fileDrop input {
+  display: none;
+}
+
+.smallStatus {
+  min-height: 22px;
+  font-size: 14px;
+}
+
+.trackList {
+  display: grid;
+  gap: 8px;
+  max-height: 360px;
+  margin-top: 14px;
+  overflow: auto;
+}
+
+.trackRow {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-height: 54px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  text-align: left;
+}
+
+.trackRow.active {
+  border-color: var(--dj-color);
+  background: color-mix(in srgb, var(--dj-color) 18%, var(--panel-2));
+}
+
+.trackRow strong,
+.trackRow small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trackRow small {
+  color: var(--muted);
+}
+
+.breakReadout {
+  min-height: 204px;
+  padding: 18px;
+  border-radius: 8px;
+  background: #101318;
+  color: #f5f0dc;
+  font-size: 20px;
+  line-height: 1.48;
+}
+
+.spinIcon {
+  float: right;
+  animation: spin 1s linear infinite;
+}
+
+.queueMeta {
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  font-size: 14px;
+}
+
+.weatherLine {
+  margin-bottom: 16px;
+}
+
+.headlineList {
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.headlineList div {
+  display: grid;
+  gap: 10px;
+}
+
+.customPanel {
+  margin-top: 18px;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.wideField {
+  grid-column: 1 / -1;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes meter {
+  0% {
+    transform: scaleY(0.24);
+  }
+  100% {
+    transform: scaleY(1);
+  }
+}
+
+@media (max-width: 1050px) {
+  .consoleGrid,
+  .workbench,
+  .formGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .visualDeck {
+    grid-template-columns: 1fr;
+  }
+
+  .vuStack {
+    grid-template-columns: repeat(16, 1fr);
+    height: 110px;
+  }
+}
+
+@media (max-width: 680px) {
+  .appShell {
+    padding: 14px;
+  }
+
+  .topBar,
+  .deckHeader,
+  .transportBar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .signalPill {
+    align-self: flex-start;
+  }
+
+  .deckPanel {
+    padding: 16px;
+    min-height: auto;
+  }
+
+  .breakReadout {
+    font-size: 17px;
+  }
+}
