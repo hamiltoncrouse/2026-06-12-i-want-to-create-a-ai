@@ -82,6 +82,9 @@ function App() {
   const [cityDraft, setCityDraft] = useState(
     () => localStorage.getItem('ai-dj-station-city') || '',
   )
+  const [citySource, setCitySource] = useState<'dj' | 'listener'>(() =>
+    localStorage.getItem('ai-dj-city-source') === 'listener' ? 'listener' : 'dj',
+  )
   const [breakEvery, setBreakEvery] = useState(() => {
     const saved = Number(localStorage.getItem('ai-dj-break-every'))
     return [1, 2, 3, 5].includes(saved) ? saved : 1
@@ -116,21 +119,23 @@ function App() {
     seek,
   } = station
 
+  const targetCity = citySource === 'dj' ? selectedDj.city : stationCity || 'auto'
+
   useEffect(() => {
     const controller = new AbortController()
     async function loadContext() {
       try {
-        const params = new URLSearchParams({ city: stationCity || 'auto' })
+        const params = new URLSearchParams({ city: targetCity })
         const response = await fetch(`/api/context?${params}`, { signal: controller.signal })
         const data = (await response.json()) as StationContext
         setContext(data)
       } catch {
-        setContext({ ...emptyContext, city: stationCity || emptyContext.city })
+        setContext({ ...emptyContext, city: targetCity === 'auto' ? emptyContext.city : targetCity })
       }
     }
     loadContext()
     return () => controller.abort()
-  }, [stationCity, contextEpoch])
+  }, [targetCity, contextEpoch])
 
   // Keep weather, news, and sports fresh during long listening sessions.
   useEffect(() => {
@@ -147,6 +152,11 @@ function App() {
   const updateBreakEvery = useCallback((value: number) => {
     setBreakEvery(value)
     localStorage.setItem('ai-dj-break-every', String(value))
+  }, [])
+
+  const updateCitySource = useCallback((value: 'dj' | 'listener') => {
+    setCitySource(value)
+    localStorage.setItem('ai-dj-city-source', value)
   }, [])
 
   const handleToggle = useCallback(() => {
@@ -577,19 +587,43 @@ function App() {
               </div>
               <p>{context.weather}</p>
               {context.facts && <p className="factsLine">{context.facts}</p>}
-              <div className="cityRow">
-                <input
-                  value={cityDraft}
-                  onChange={(event) => setCityDraft(event.target.value)}
-                  placeholder="Auto-detect my city"
-                  aria-label="Station city"
-                  onKeyDown={(event) => event.key === 'Enter' && applyStationCity()}
-                />
-                <button className="iconButton" type="button" onClick={applyStationCity}>
-                  Set
+              <div className="sourceToggle">
+                <button
+                  type="button"
+                  className={citySource === 'dj' ? 'freqChip active' : 'freqChip'}
+                  onClick={() => updateCitySource('dj')}
+                >
+                  DJ's home city
+                </button>
+                <button
+                  type="button"
+                  className={citySource === 'listener' ? 'freqChip active' : 'freqChip'}
+                  onClick={() => updateCitySource('listener')}
+                >
+                  My location
                 </button>
               </div>
-              <p className="hintLine">Leave empty to broadcast from your detected location.</p>
+              {citySource === 'dj' ? (
+                <p className="hintLine">
+                  News and weather follow {selectedDj.name}, broadcasting from {selectedDj.city}.
+                </p>
+              ) : (
+                <>
+                  <div className="cityRow">
+                    <input
+                      value={cityDraft}
+                      onChange={(event) => setCityDraft(event.target.value)}
+                      placeholder="Auto-detect my city"
+                      aria-label="Station city"
+                      onKeyDown={(event) => event.key === 'Enter' && applyStationCity()}
+                    />
+                    <button className="iconButton" type="button" onClick={applyStationCity}>
+                      Set
+                    </button>
+                  </div>
+                  <p className="hintLine">Leave empty to broadcast from your detected location.</p>
+                </>
+              )}
             </div>
             <div className="infoCard">
               <div className="infoTitle">

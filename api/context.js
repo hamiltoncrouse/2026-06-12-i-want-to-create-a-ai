@@ -35,14 +35,45 @@ function extractRssTitles(xml, limit) {
     .slice(0, limit)
 }
 
+const stateNames = {
+  AL: 'Alabama', AK: 'Alaska', AZ: 'Arizona', AR: 'Arkansas', CA: 'California',
+  CO: 'Colorado', CT: 'Connecticut', DE: 'Delaware', FL: 'Florida', GA: 'Georgia',
+  HI: 'Hawaii', ID: 'Idaho', IL: 'Illinois', IN: 'Indiana', IA: 'Iowa',
+  KS: 'Kansas', KY: 'Kentucky', LA: 'Louisiana', ME: 'Maine', MD: 'Maryland',
+  MA: 'Massachusetts', MI: 'Michigan', MN: 'Minnesota', MS: 'Mississippi', MO: 'Missouri',
+  MT: 'Montana', NE: 'Nebraska', NV: 'Nevada', NH: 'New Hampshire', NJ: 'New Jersey',
+  NM: 'New Mexico', NY: 'New York', NC: 'North Carolina', ND: 'North Dakota', OH: 'Ohio',
+  OK: 'Oklahoma', OR: 'Oregon', PA: 'Pennsylvania', RI: 'Rhode Island', SC: 'South Carolina',
+  SD: 'South Dakota', TN: 'Tennessee', TX: 'Texas', UT: 'Utah', VT: 'Vermont',
+  VA: 'Virginia', WA: 'Washington', WV: 'West Virginia', WI: 'Wisconsin', WY: 'Wyoming',
+  DC: 'District of Columbia',
+}
+
+function parseCity(city) {
+  const [name, ...rest] = city.split(',').map((part) => part.trim())
+  const regionRaw = rest.join(', ')
+  const region = stateNames[regionRaw.toUpperCase()] || regionRaw
+  return { name: name || city, region }
+}
+
 async function getCoordinates(city) {
-  const searchName = city.split(',')[0].trim() || city
-  const params = new URLSearchParams({ name: searchName, count: '1', language: 'en', format: 'json' })
+  const { name, region } = parseCity(city)
+  const params = new URLSearchParams({ name, count: '10', language: 'en', format: 'json' })
   const response = await fetch(`https://geocoding-api.open-meteo.com/v1/search?${params}`)
   if (!response.ok) return null
   const data = await response.json()
-  const result = data.results?.[0]
-  if (!result) return null
+  const results = data.results || []
+  if (!results.length) return null
+  // "Norwich, CT" must resolve to Connecticut, not Norwich, England.
+  const wanted = region.toLowerCase()
+  const result =
+    (wanted &&
+      results.find(
+        (item) =>
+          (item.admin1 || '').toLowerCase() === wanted ||
+          (item.country || '').toLowerCase() === wanted,
+      )) ||
+    results[0]
   return {
     latitude: result.latitude,
     longitude: result.longitude,
@@ -109,18 +140,18 @@ function geoFeed(place, limit) {
   )
 }
 
-async function getHeadlines(city) {
-  const place = city.split(',')[0].trim() || city
+async function getHeadlines(place) {
+  const [name, state] = place.split(',').map((part) => part.trim())
   const [geo, search] = await Promise.all([
     geoFeed(place, 5),
-    searchFeed(`"${place}" local news when:2d`, 4),
+    searchFeed(`"${name}"${state ? ` ${state}` : ''} local news when:2d`, 4),
   ])
   return [...new Set([...geo, ...search])].slice(0, 6)
 }
 
-function getSports(city) {
-  const place = city.split(',')[0].trim() || city
-  return searchFeed(`"${place}" sports when:2d`, 3)
+function getSports(place) {
+  const [name, state] = place.split(',').map((part) => part.trim())
+  return searchFeed(`"${name}"${state ? ` ${state}` : ''} sports when:2d`, 3)
 }
 
 async function getCityFacts(coordinates, city) {
@@ -165,10 +196,13 @@ export default async function handler(req, res) {
 
   try {
     const coordinates = await getCoordinates(city)
+    // Use the geocoder's canonical "City, State" so news feeds disambiguate
+    // places like Norwich, Connecticut from Norwich, England.
+    const place = coordinates?.name || city
     const [weather, headlines, sports, facts] = await Promise.all([
       getWeather(coordinates),
-      getHeadlines(city),
-      getSports(city),
+      getHeadlines(place),
+      getSports(place),
       getCityFacts(coordinates, city),
     ])
     res.status(200).json({
