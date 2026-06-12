@@ -485,7 +485,7 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
       const nextTitle = nextTrack?.title || 'another cut'
       const previousTitle = previousTrack?.title || 'the last track'
       const scripts: Record<BreakKind, string> = {
-        intro: `${activeDj.name} on Airbreak, live from ${city}. We are starting with ${nextTitle}. Stay close.`,
+        intro: `${activeDj.name} on ${stationName}, live from ${city}. We are starting with ${nextTitle}. Stay close.`,
         songTalk: previousTrack
           ? `${activeDj.name} here. That was ${previousTitle}, and up next we have ${nextTitle} on a ${contextRef.current.weather.toLowerCase()} day in ${city}.`
           : `${activeDj.name} here. Up next we have ${nextTitle} on a ${contextRef.current.weather.toLowerCase()} day in ${city}.`,
@@ -670,7 +670,7 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
       navigator.mediaSession.metadata = new MediaMetadata({
         title: track.title,
         artist: track.artist,
-        album: `Airbreak · ${djRef.current.name}`,
+        album: `${djRef.current.stationName || 'Airbreak'} · ${djRef.current.name}`,
         artwork: [
           { src: artworkDataUrl(djRef.current.color), sizes: '512x512', type: 'image/svg+xml' },
         ],
