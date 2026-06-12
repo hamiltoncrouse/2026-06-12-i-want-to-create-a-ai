@@ -50,6 +50,8 @@ const blankDraft: DjProfile = {
   handle: 'Local AI DJ',
   format: 'listener-curated music',
   city: 'New York, NY',
+  stationName: 'Airbreak Local',
+  callsign: 'Airbreak',
   voice: 'marin',
   style: 'Friendly, witty, specific, concise, and natural on mic.',
   backstory: 'A station host who loves connecting songs to local life.',
@@ -399,7 +401,7 @@ function App() {
                       <strong>{dj.name}</strong>
                       <small>{dj.handle}</small>
                       <small className="djTags">
-                        {dj.city} · voice “{dj.voice}”
+                        {dj.city} · {dj.stationName || 'Airbreak'} · voice “{dj.voice}”
                       </small>
                     </span>
                   </button>
@@ -420,6 +422,11 @@ function App() {
             <div className="personaCard">
               <p className="eyebrow">On the format</p>
               <p>{selectedDj.format}</p>
+              <p className="eyebrow">Station</p>
+              <p>
+                {selectedDj.stationName || 'Airbreak'}
+                {selectedDj.callsign ? ` · ${selectedDj.callsign}` : ''}
+              </p>
               <p className="eyebrow">Backstory</p>
               <p>{selectedDj.backstory}</p>
             </div>
@@ -454,6 +461,22 @@ function App() {
                   <input
                     value={draftDj.city}
                     onChange={(event) => setDraftDj({ ...draftDj, city: event.target.value })}
+                  />
+                </label>
+                <label>
+                  <span>Station</span>
+                  <input
+                    value={draftDj.stationName || ''}
+                    onChange={(event) =>
+                      setDraftDj({ ...draftDj, stationName: event.target.value })
+                    }
+                  />
+                </label>
+                <label>
+                  <span>Callsign</span>
+                  <input
+                    value={draftDj.callsign || ''}
+                    onChange={(event) => setDraftDj({ ...draftDj, callsign: event.target.value })}
                   />
                 </label>
                 <label>

@@ -11,7 +11,7 @@ const kindNotes = {
   commercial:
     'A 20 to 40 second spot for an obviously fictional local business that fits the city, with a slogan or fictional address. One segment, speaker "dj". Then hand back to the music.',
   bumper:
-    'A produced station imaging sweeper, 8 to 20 words maximum: the station name Airbreak, the DJ name or show vibe, straight into the next song. One segment, speaker "imaging". Punchy, no filler.',
+    'A produced station imaging sweeper, 8 to 20 words maximum: the station identity, the DJ name or show vibe, straight into the next song. One segment, speaker "imaging". Punchy, no filler.',
   caller:
     'A listener call-in. Structure segments: a short "dj" segment answering the phones, then the "caller" (a plausible first name from a real neighborhood or suburb of the station city) speaking for themselves — requesting the next track or telling a one-line story about it, sounding like a real person on a cell phone — then a short "dj" segment reacting and sending it to the song. Structure: dj, caller, dj.',
 }
@@ -45,10 +45,12 @@ function fallbackBreak(body) {
   const headline = context.headlines?.[0] ? `Also watching: ${context.headlines[0]}.` : ''
   const name = dj.name || 'your AI DJ'
   const city = context.city || dj.city || 'the station'
+  const stationName = dj.stationName || 'Airbreak'
+  const callsign = dj.callsign || stationName
   const tease = next.title ? `Next: ${next.title}` : 'More music ahead'
 
   if (kind === 'bumper') {
-    const script = `Airbreak. ${name}. ${city}. More music right now.`
+    const script = `${callsign}. ${name}. ${city}. More music right now.`
     return {
       kind,
       title: 'Station bumper',
@@ -66,9 +68,9 @@ function fallbackBreak(body) {
       title: 'Caller request',
       tease,
       source: 'fallback',
-      script: `Phones are lit at Airbreak. ${callerLine} You got it — this one is going out to you.`,
+      script: `Phones are lit at ${stationName}. ${callerLine} You got it — this one is going out to you.`,
       segments: [
-        { speaker: 'dj', text: 'Phones are lit at Airbreak. Go ahead, you are on the air.' },
+        { speaker: 'dj', text: `Phones are lit at ${stationName}. Go ahead, you are on the air.` },
         { speaker: 'caller', text: callerLine },
         { speaker: 'dj', text: 'You got it — this one is going out to you.' },
       ],
@@ -76,7 +78,7 @@ function fallbackBreak(body) {
   }
 
   if (kind === 'newsWeather') {
-    const reporterText = `Thanks! This is Robin Vale at the Airbreak news desk. ${weather || 'Weather is holding steady.'} ${headline || 'A quiet day around town.'} Back to you.`
+    const reporterText = `Thanks! This is Robin Vale at the ${stationName} news desk. ${weather || 'Weather is holding steady.'} ${headline || 'A quiet day around town.'} Back to you.`
     return {
       kind,
       title: 'News and weather',
@@ -97,7 +99,7 @@ function fallbackBreak(body) {
       : ''
   const intro =
     kind === 'intro'
-      ? `This is ${name} on the desk, broadcasting from ${city}.`
+      ? `This is ${name} on the desk at ${stationName}, broadcasting from ${city}.`
       : `${name} back with you.`
 
   const script = [
@@ -180,6 +182,7 @@ export default async function handler(req, res) {
           'Write compact, spoken radio that sounds live, specific, and human.',
           'The station broadcasts from context.city. context.weather, context.headlines, context.sports, context.facts, and localTime are the only sources of local truth — never invent local facts beyond them.',
           'The DJ persona city is backstory only; the show is local to context.city.',
+          'If dj.stationName or dj.callsign is present, use it as the station identity instead of the generic Airbreak name.',
           'previousTrack is the song that just ended before this break. nextTrack is the song that starts after this break. Never say nextTrack already played.',
           'If previousTrack is null or missing, do not back-announce a song; just set up nextTrack.',
           'Return the break as ordered segments, each with a speaker: "dj" for the host, "caller" for a listener on the phone, "reporter" for a station colleague, "imaging" for the produced station voice.',

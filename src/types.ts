@@ -27,6 +27,8 @@ export type DjProfile = {
   handle: string
   format: string
   city: string
+  stationName?: string
+  callsign?: string
   voice: VoiceName
   style: string
   backstory: string

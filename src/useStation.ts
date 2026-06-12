@@ -25,7 +25,6 @@ const PROBE_TIMEOUT_MS = 8000
 // If the full break is still pending at a transition, use the short pre-voiced
 // liner instead of a synthetic browser-speech fallback.
 const BREAK_GRACE_MS = 900
-const STANDBY_CALLSIGN = 'W I C H'
 
 export type StationMode = 'idle' | 'loading' | 'break' | 'song' | 'paused'
 
@@ -371,11 +370,12 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
 
   const requestStandbyLiner = useCallback(() => {
     const activeDj = djRef.current
-    const key = `${activeDj.id}:${activeDj.voice}:${activeDj.style}`
+    const key = `${activeDj.id}:${activeDj.voice}:${activeDj.style}:${activeDj.callsign || ''}`
     const existing = standbyLinerRef.current.get(key)
     if (existing) return existing
 
-    const text = `You're listening to ${activeDj.name} on ${STANDBY_CALLSIGN}. Keep listening.`
+    const station = activeDj.callsign || activeDj.stationName || 'Airbreak'
+    const text = `You're listening to ${activeDj.name} on ${station}. Keep listening.`
     const promise = (async (): Promise<BreakPlan | null> => {
       const voiceResponse = await fetch('/api/voice', {
         method: 'POST',
@@ -478,6 +478,7 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
     (index: number, kind: BreakKind, previousIndex?: number): BreakPlan => {
       const activeDj = djRef.current
       const city = contextRef.current.city || activeDj.city
+      const stationName = activeDj.stationName || 'Airbreak'
       const previousTrack =
         typeof previousIndex === 'number' ? tracksRef.current[previousIndex] : undefined
       const nextTrack = tracksRef.current[index]
@@ -489,8 +490,8 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
           ? `${activeDj.name} here. That was ${previousTitle}, and up next we have ${nextTitle} on a ${contextRef.current.weather.toLowerCase()} day in ${city}.`
           : `${activeDj.name} here. Up next we have ${nextTitle} on a ${contextRef.current.weather.toLowerCase()} day in ${city}.`,
         newsWeather: `Quick check-in from ${city}: ${contextRef.current.weather}. ${contextRef.current.headlines[0] || 'More music straight ahead.'} Now back to it with ${nextTitle}.`,
-        commercial: `This hour of Airbreak comes courtesy of Needle Drop Coffee, keeping the control room awake since forever. Back to the music with ${nextTitle}.`,
-        bumper: `Airbreak. ${activeDj.name}. ${city}. More music right now.`,
+        commercial: `This hour of ${stationName} comes courtesy of Needle Drop Coffee, keeping the control room awake since forever. Back to the music with ${nextTitle}.`,
+        bumper: `${activeDj.callsign || 'Airbreak'}. ${activeDj.name}. ${city}. More music right now.`,
         caller: `Just had a listener on the line asking for ${nextTitle} - you got it. This one is for you.`,
       }
       const script = scripts[kind] || scripts.songTalk
