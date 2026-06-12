@@ -75,7 +75,9 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
   const goodTracksRef = useRef<Set<string>>(new Set())
   const badTracksRef = useRef<Set<string>>(new Set())
   const nextIndexPromiseRef = useRef<Promise<number> | null>(null)
-  const chainRef = useRef<(index: number, count: number) => Promise<void>>(async () => undefined)
+  const chainRef = useRef<(index: number, count: number, previousIndex?: number) => Promise<void>>(
+    async () => undefined,
+  )
 
   useEffect(() => {
     tracksRef.current = tracks
@@ -405,11 +407,19 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
     [probeTrack],
   )
 
-  const requestBreak = useCallback((index: number, kind: BreakKind) => {
+  const requestBreak = useCallback((index: number, kind: BreakKind, previousIndex?: number) => {
     const activeTracks = tracksRef.current
-    const track = activeTracks[index]
-    const upcomingTrack = activeTracks[(index + 1) % activeTracks.length]
-    const key = `${index}:${kind}:${track?.id || 'empty'}:${djRef.current.id}`
+    const nextTrack = activeTracks[index]
+    const previousTrack = typeof previousIndex === 'number' ? activeTracks[previousIndex] : undefined
+    const queuedAfter = activeTracks[(index + 1) % activeTracks.length]
+    const key = [
+      index,
+      kind,
+      previousTrack?.id || 'no-prev',
+      nextTrack?.id || 'empty',
+      queuedAfter?.id || 'no-after',
+      djRef.current.id,
+    ].join(':')
     const existing = preloadRef.current.get(key)
     if (existing) return existing
 
@@ -422,8 +432,8 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
           dj: djRef.current,
           context: contextRef.current,
           kind,
-          currentTrack: track,
-          nextTrack: upcomingTrack,
+          previousTrack,
+          nextTrack,
           queue: activeTracks.slice(index, index + 6),
           recentScripts: recentScriptsRef.current,
         }),
@@ -471,10 +481,13 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
     })().catch((): BreakPlan => {
       const activeDj = djRef.current
       const city = contextRef.current.city || activeDj.city
-      const nextTitle = upcomingTrack?.title || 'another cut'
+      const nextTitle = nextTrack?.title || 'another cut'
+      const previousTitle = previousTrack?.title || 'the last track'
       const scripts: Record<BreakKind, string> = {
         intro: `${activeDj.name} on Airbreak, live from ${city}. We are starting with ${nextTitle}. Stay close.`,
-        songTalk: `${activeDj.name} here. That was ${track?.title || 'the last track'}, and up next we have ${nextTitle} on a ${contextRef.current.weather.toLowerCase()} day in ${city}.`,
+        songTalk: previousTrack
+          ? `${activeDj.name} here. That was ${previousTitle}, and up next we have ${nextTitle} on a ${contextRef.current.weather.toLowerCase()} day in ${city}.`
+          : `${activeDj.name} here. Up next we have ${nextTitle} on a ${contextRef.current.weather.toLowerCase()} day in ${city}.`,
         newsWeather: `Quick check-in from ${city}: ${contextRef.current.weather}. ${contextRef.current.headlines[0] || 'More music straight ahead.'} Now back to it with ${nextTitle}.`,
         commercial: `This hour of Airbreak comes courtesy of Needle Drop Coffee, keeping the control room awake since forever. Back to the music with ${nextTitle}.`,
         bumper: `Airbreak. ${activeDj.name}. ${city}. More music right now.`,
@@ -509,7 +522,7 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
         const length = Math.max(1, tracksRef.current.length)
         const nextIndex = await findPlayableIndex((index + 1) % length)
         if (songsSinceBreakRef.current >= breakEveryRef.current) {
-          requestBreak(nextIndex, selectBreakKind(breakSeqRef.current))
+          requestBreak(nextIndex, selectBreakKind(breakSeqRef.current), index)
         }
         return nextIndex
       })()
@@ -592,7 +605,7 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
   )
 
   const playBreakThenSong = useCallback(
-    async (index: number, count: number) => {
+    async (index: number, count: number, previousIndex?: number) => {
       const activeTracks = tracksRef.current
       if (!activeTracks.length || stopRef.current) return
 
@@ -600,7 +613,7 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
       phaseRef.current = 'loading'
       setMode('loading')
       setStatus('Cueing the mic')
-      const breakPlan = await requestBreak(index, breakKind)
+      const breakPlan = await requestBreak(index, breakKind, previousIndex)
       if (stopRef.current) return
 
       phaseRef.current = 'break'
@@ -663,7 +676,7 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
         : await findPlayableIndex((fromIndex + 1) % Math.max(1, tracksRef.current.length))
       if (stopRef.current) return
       if (songsSinceBreakRef.current >= breakEveryRef.current) {
-        chainRef.current(nextIndex, nextCount)
+        chainRef.current(nextIndex, nextCount, fromIndex)
       } else {
         songsSinceBreakRef.current += 1
         segueToSong(nextIndex, nextCount)

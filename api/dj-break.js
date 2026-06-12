@@ -5,7 +5,7 @@ const kindNotes = {
   intro:
     'Open the show: welcome listeners, set the vibe for this hour in the DJ\'s voice, then set up the first song. One segment, speaker "dj".',
   songTalk:
-    'Back-announce the previous song in a line, then talk up the next one with something specific. One segment, speaker "dj".',
+    'If previousTrack is present, back-announce it in one line, then talk up nextTrack with something specific. If previousTrack is missing, only introduce nextTrack. One segment, speaker "dj".',
   newsWeather:
     'The DJ tosses to a station colleague, then the colleague (speaker "reporter") introduces themselves by first and last name and their role, delivers the update using only facts from the context (weather and headlines or sports), and tosses back. End with one short "dj" segment reacting and setting up the song. Structure: dj, reporter, dj.',
   commercial:
@@ -36,8 +36,8 @@ const angles = [
 
 function fallbackBreak(body) {
   const dj = body.dj || {}
-  const current = body.currentTrack || {}
-  const next = body.nextTrack || {}
+  const previous = body.previousTrack || {}
+  const next = body.nextTrack || body.currentTrack || {}
   const context = body.context || {}
   const kind = breakKinds.includes(body.kind) ? body.kind : 'songTalk'
 
@@ -102,8 +102,10 @@ function fallbackBreak(body) {
 
   const script = [
     intro,
-    current.title ? `We are setting up ${current.title}${current.artist ? ` by ${current.artist}` : ''}.` : '',
-    next.title ? `After that, ${next.title}${next.artist ? ` by ${next.artist}` : ''} is waiting in the rack.` : '',
+    previous.title && kind !== 'intro'
+      ? `That was ${previous.title}${previous.artist ? ` by ${previous.artist}` : ''}.`
+      : '',
+    next.title ? `Coming up, ${next.title}${next.artist ? ` by ${next.artist}` : ''}.` : '',
     weather,
     headline,
     sponsor,
@@ -178,6 +180,8 @@ export default async function handler(req, res) {
           'Write compact, spoken radio that sounds live, specific, and human.',
           'The station broadcasts from context.city. context.weather, context.headlines, context.sports, context.facts, and localTime are the only sources of local truth — never invent local facts beyond them.',
           'The DJ persona city is backstory only; the show is local to context.city.',
+          'previousTrack is the song that just ended before this break. nextTrack is the song that starts after this break. Never say nextTrack already played.',
+          'If previousTrack is null or missing, do not back-announce a song; just set up nextTrack.',
           'Return the break as ordered segments, each with a speaker: "dj" for the host, "caller" for a listener on the phone, "reporter" for a station colleague, "imaging" for the produced station voice.',
           `This break is a "${kind}" break. ${kindNotes[kind]}`,
           kind === 'newsWeather' ? `For this break the reporter segment is ${reporterRole}.` : '',
@@ -194,7 +198,7 @@ export default async function handler(req, res) {
           dj: body.dj,
           context: body.context,
           kind,
-          currentTrack: body.currentTrack,
+          previousTrack: body.previousTrack || null,
           nextTrack: body.nextTrack,
           queue: body.queue,
           recentScripts: body.recentScripts || (body.recentScript ? [body.recentScript] : []),
