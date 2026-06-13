@@ -434,11 +434,12 @@ export function useStation(
       fx.compressor.ratio.value = 8
     } else if (speaker === 'spot') {
       // Pre-recorded assets (phone ring, guest recording): play clean and
-      // natural with only gentle leveling, no presence/air hyping.
+      // natural with only gentle leveling, no presence/air hyping. Lifted ~20%
+      // so the vintage recording sits up with the DJ instead of feeling quiet.
       fx.dry.gain.value = 1
       fx.phone.gain.value = 0
       fx.echo.gain.value = 0
-      fx.output.gain.value = 0.98
+      fx.output.gain.value = 1.18
       fx.presence.gain.value = 1.5
       fx.air.gain.value = 0.5
       fx.compressor.threshold.value = -24

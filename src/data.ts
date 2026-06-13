@@ -232,7 +232,7 @@ export const djSpots: Record<string, ProducedSpot[]> = {
         { speaker: 'spot', audioUrl: '/audio/joegoldberg.mp3' },
         {
           speaker: 'dj',
-          text: "Ha ha, that is Joe Goldberg, Blue Ribbon Pontiac, four hundred West Thames Street right here in Norwich. Thanks, Joe. Alright, back to the music.",
+          text: "Come on down to Blue Ribbon Pontiac, four hundred West Thames Street right here in Norwich. Thanks, Joe. Alright, back to the music.",
         },
       ],
     },
