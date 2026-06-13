@@ -227,11 +227,11 @@ export const djSpots: Record<string, ProducedSpot[]> = {
         {
           speaker: 'dj',
           texts: [
-            "Alright, you know what time it is. Let's check in with our good friend Joe Goldberg down at Blue Ribbon Pontiac. Let me give him a ring.",
+            "Alright, you know what time it is. Let's check in with our good friend Joe Goldberg down at Blue Ribbon Pontiac in West Norwich. Let me give him a ring.",
             "Time to ring up the Tigers over at Blue Ribbon Pontiac. Joe Goldberg always has a deal cooking. Let's get him on the line.",
-            "You want a Pontiac, you call the best. Joe Goldberg, Blue Ribbon Pontiac, Cherry Hill's own. Let me dial him up.",
+            "You want a Pontiac, you call the best. Joe Goldberg, a Cherry Hill man, down at Blue Ribbon Pontiac in West Norwich. Let me dial him up.",
             "Let's see what the Tigers down at Blue Ribbon Pontiac have on the lot today. Joe, you there?",
-            "Our pal Joe Goldberg is standing by at Blue Ribbon Pontiac. Let's give him a call and see what's moving.",
+            "Our pal Joe Goldberg is standing by at Blue Ribbon Pontiac on West Thames Street. Let's give him a call and see what's moving.",
           ],
         },
         { speaker: 'spot', audioUrl: '/audio/phone-ring.mp3' },
@@ -239,11 +239,12 @@ export const djSpots: Record<string, ProducedSpot[]> = {
         {
           speaker: 'dj',
           texts: [
-            "Come on down to Blue Ribbon Pontiac, four hundred West Thames Street right here in Norwich. Thanks, Joe. Alright, back to the music.",
+            "Come on down to Blue Ribbon Pontiac, four hundred West Thames Street in West Norwich. Thanks, Joe. Alright, back to the music.",
             "That's Joe Goldberg and the Tigers at Blue Ribbon Pontiac. Come on down, tell him Johnny sent you. Say hi to Marcie. Now, back to the music.",
-            "Come on down to Blue Ribbon Pontiac on West Thames Street. Best Pontiac deals in Cherry Hill and all of Norwich. Thanks, Joe. Back to the tunes.",
+            "Come on down to Blue Ribbon Pontiac on West Thames Street in West Norwich. Best Pontiac deals around. Thanks, Joe. Back to the tunes.",
             "Joe Goldberg, Blue Ribbon Pontiac. Come on down and drive home a brand new Pontiac today. Give Marcie our best. Alright, back to the music.",
-            "That's the Tigers down at Blue Ribbon Pontiac. Come on down, four hundred West Thames Street. Thanks, Joe. Now let's get back to it.",
+            "That's the Tigers down at Blue Ribbon Pontiac in West Norwich. Come on down, four hundred West Thames Street. Thanks, Joe. Now let's get back to it.",
+            "Joe Goldberg, all the way from Cherry Hill to the Blue Ribbon lot on West Thames Street. Come on down. Thanks, Joe, and back to the music.",
           ],
         },
       ],
