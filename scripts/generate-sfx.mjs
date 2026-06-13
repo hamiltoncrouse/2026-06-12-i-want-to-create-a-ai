@@ -64,6 +64,10 @@ if (!apiKey) {
 const outDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'sfx')
 await mkdir(outDir, { recursive: true })
 
+// Appended to every prompt: ElevenLabs occasionally renders vocal-ish tones
+// unless voices are forbidden emphatically.
+const NO_VOICE = ' Pure abstract sound design only. Absolutely no vocals, no voices, no speech, no singing, no humming, no words.'
+
 async function generate(prompt, durationSeconds) {
   const response = await fetch('https://api.elevenlabs.io/v1/sound-generation', {
     method: 'POST',
@@ -73,9 +77,9 @@ async function generate(prompt, durationSeconds) {
       Accept: 'audio/mpeg',
     },
     body: JSON.stringify({
-      text: prompt,
+      text: prompt + NO_VOICE,
       duration_seconds: durationSeconds,
-      prompt_influence: 0.5,
+      prompt_influence: 0.6,
     }),
   })
   if (!response.ok) {

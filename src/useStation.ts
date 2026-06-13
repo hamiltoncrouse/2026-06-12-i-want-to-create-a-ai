@@ -38,6 +38,10 @@ const PROBE_TIMEOUT_MS = 8000
 // If the full break is still pending at a transition, use the short pre-voiced
 // liner instead of a synthetic browser-speech fallback.
 const BREAK_GRACE_MS = 900
+// Transition beds are normalized to this peak, then trimmed so they sit just
+// under the DJ instead of jumping out.
+const SFX_TARGET_PEAK = 0.7
+const SFX_TRIM = 0.6
 
 export type StationMode = 'idle' | 'loading' | 'break' | 'song' | 'paused'
 
@@ -106,6 +110,10 @@ export function useStation(
   const sfxRef = useRef<HTMLAudioElement | null>(null)
   const sfxManifestRef = useRef<Record<string, string[]> | null>(null)
   const sfxRuntimeCacheRef = useRef<Map<string, Promise<string | null>>>(new Map())
+  const sfxLimiterRef = useRef<DynamicsCompressorNode | null>(null)
+  const sfxBufferCacheRef = useRef<Map<string, { buffer: AudioBuffer; gain: number } | null>>(
+    new Map(),
+  )
   const audioCtxRef = useRef<AudioContext | null>(null)
   const analyserNodeRef = useRef<AnalyserNode | null>(null)
   const fxRef = useRef<VoiceFx | null>(null)
@@ -369,6 +377,17 @@ export function useStation(
         limiter.connect(output)
         output.connect(node)
 
+        // Sound effects get their own brickwall limiter so a hot bed can never
+        // overshoot the DJ; per-bed normalization happens before this node.
+        const sfxLimiter = ctx.createDynamicsCompressor()
+        sfxLimiter.threshold.value = -3
+        sfxLimiter.knee.value = 0
+        sfxLimiter.ratio.value = 20
+        sfxLimiter.attack.value = 0.002
+        sfxLimiter.release.value = 0.12
+        sfxLimiter.connect(node)
+        sfxLimiterRef.current = sfxLimiter
+
         node.connect(ctx.destination)
         audioCtxRef.current = ctx
         analyserNodeRef.current = node
@@ -460,6 +479,40 @@ export function useStation(
     return promise
   }, [])
 
+  // Decode a bed once and measure its peak so we can normalize every effect to
+  // the same level — ElevenLabs renders vary a lot in loudness.
+  const loadSfxBuffer = useCallback(async (url: string) => {
+    const ctx = audioCtxRef.current
+    if (!ctx) return null
+    const cached = sfxBufferCacheRef.current.get(url)
+    if (cached !== undefined) return cached
+    try {
+      const response = await fetch(url)
+      if (!response.ok) {
+        sfxBufferCacheRef.current.set(url, null)
+        return null
+      }
+      const buffer = await ctx.decodeAudioData(await response.arrayBuffer())
+      let peak = 0
+      for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+        const data = buffer.getChannelData(ch)
+        for (let i = 0; i < data.length; i++) {
+          const value = Math.abs(data[i])
+          if (value > peak) peak = value
+        }
+      }
+      // Bring each bed to a common target peak; cap the boost so near-silent
+      // files don't explode.
+      const gain = peak > 0.0001 ? Math.min(SFX_TARGET_PEAK / peak, 4) : 1
+      const entry = { buffer, gain }
+      sfxBufferCacheRef.current.set(url, entry)
+      return entry
+    } catch {
+      sfxBufferCacheRef.current.set(url, null)
+      return null
+    }
+  }, [])
+
   const playSfx = useCallback(
     async (category: string) => {
       const manifest = await loadSfxManifest()
@@ -469,6 +522,36 @@ export function useStation(
         ? pool[Math.floor(Math.random() * pool.length)]
         : await getRuntimeSfx(category)
       if (!url || stopRef.current) return false
+
+      const ctx = audioCtxRef.current
+      const limiter = sfxLimiterRef.current
+      // Preferred path: decode, peak-normalize, and play through the SFX
+      // limiter so the bed sits a notch under the DJ and never spikes.
+      if (ctx && limiter) {
+        const entry = await loadSfxBuffer(url)
+        if (entry && !stopRef.current) {
+          ctx.resume().catch(() => undefined)
+          return new Promise<boolean>((resolve) => {
+            let settled = false
+            const done = (ok: boolean) => {
+              if (settled) return
+              settled = true
+              resolve(ok)
+            }
+            const source = ctx.createBufferSource()
+            source.buffer = entry.buffer
+            const gain = ctx.createGain()
+            gain.gain.value = entry.gain * SFX_TRIM * masterRef.current
+            source.connect(gain)
+            gain.connect(limiter)
+            source.onended = () => done(true)
+            source.start()
+            window.setTimeout(() => done(true), entry.buffer.duration * 1000 + 400)
+          })
+        }
+      }
+
+      // Fallback: plain element playback at a trimmed volume.
       return new Promise<boolean>((resolve) => {
         if (!sfxRef.current) {
           sfxRef.current = new Audio()
@@ -483,15 +566,14 @@ export function useStation(
         }
         audio.onended = () => done(true)
         audio.onerror = () => done(false)
-        audio.volume = masterRef.current
+        audio.volume = Math.min(1, masterRef.current * SFX_TRIM)
         audio.src = url
         audio.load()
         audio.play().catch(() => done(false))
-        // Safety cap so a long or stalled effect never holds up the mic.
         window.setTimeout(() => done(true), 2600)
       })
     },
-    [getRuntimeSfx, loadSfxManifest],
+    [getRuntimeSfx, loadSfxBuffer, loadSfxManifest],
   )
 
   const playStinger = useCallback(() => {
