@@ -5,7 +5,10 @@
     "/sfx/impact-2.mp3",
     "/sfx/impact-3.mp3",
     "/sfx/impact-4.mp3",
-    "/sfx/impact-5.mp3"
+    "/sfx/impact-5.mp3",
+    "/sfx/impact-6.mp3",
+    "/sfx/impact-7.mp3",
+    "/sfx/impact-8.mp3"
   ],
   "sweep": [
     "/sfx/sweep-0.mp3",
@@ -15,16 +18,23 @@
     "/sfx/sweep-4.mp3",
     "/sfx/sweep-5.mp3",
     "/sfx/sweep-6.mp3",
-    "/sfx/sweep-7.mp3"
+    "/sfx/sweep-7.mp3",
+    "/sfx/sweep-8.mp3",
+    "/sfx/sweep-9.mp3",
+    "/sfx/sweep-10.mp3",
+    "/sfx/sweep-11.mp3"
   ],
   "riser": [
     "/sfx/riser-0.mp3",
     "/sfx/riser-1.mp3",
     "/sfx/riser-2.mp3",
-    "/sfx/riser-3.mp3"
+    "/sfx/riser-3.mp3",
+    "/sfx/riser-4.mp3",
+    "/sfx/riser-5.mp3"
   ],
   "scratch": [
     "/sfx/scratch-0.mp3",
-    "/sfx/scratch-1.mp3"
+    "/sfx/scratch-1.mp3",
+    "/sfx/scratch-2.mp3"
   ]
 }

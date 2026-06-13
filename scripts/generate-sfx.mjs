@@ -11,46 +11,57 @@
 // The category/prompt definitions are mirrored from src/data.ts so the pool
 // matches what the player expects.
 
+import { existsSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
 const sfxCategories = {
   impact: {
-    count: 6,
+    count: 9,
     durationSeconds: 1.5,
     prompts: [
       'Punchy radio station imaging stinger: a fast whoosh sweeping down into a deep bass boom impact, clean and produced, no music, no voice.',
       'Hard-hitting radio drop: short reverse swell into a sub-bass slam with a metallic tail, no music, no voice.',
       'Bright broadcast impact: quick airy whoosh into a tight punchy boom, energetic station imaging, no music, no voice.',
       'Cinematic radio bumper hit: deep boom with a short downward whoosh and a clean tail, no music, no voice.',
+      'Boomy braam stinger with a short reversed lead-in, modern radio imaging, no music, no voice.',
+      'Tight electro zap into a punchy low thud, clean station imaging hit, no music, no voice.',
+      'Glassy bright impact with a quick descending whoosh and a snappy tail, no music, no voice.',
     ],
   },
   sweep: {
-    count: 8,
+    count: 12,
     durationSeconds: 1.1,
     prompts: [
       'Short radio transition whoosh sweeping downward into a song, smooth airy noise sweep, no music, no voice.',
       'Quick noise sweep transition, soft airy downward whoosh, clean radio imaging, no music, no voice.',
       'Filtered white-noise sweep sliding down into a beat, modern radio transition, no music, no voice.',
       'Light breezy whoosh transition between songs, smooth and short, no music, no voice.',
+      'Reverse cymbal-style swell rising then cutting away, clean radio sweep, no music, no voice.',
+      'Wide airy stereo whoosh passing left to right, smooth radio transition, no music, no voice.',
+      'Crisp digital sweep with a subtle pitch glide downward, modern imaging, no music, no voice.',
+      'Soft warm analog tape-style whoosh transition, vintage radio feel, no music, no voice.',
     ],
   },
   riser: {
-    count: 4,
+    count: 6,
     durationSeconds: 1.3,
     prompts: [
       'Quick upward riser sweep building into a drop, energetic radio imaging transition, no music, no voice.',
       'Rising noise swell building tension into a cut, bright radio transition, no music, no voice.',
       'Short ascending whoosh riser into an impact, punchy station imaging, no music, no voice.',
+      'Accelerating ticking riser building anticipation into a hit, clean imaging, no music, no voice.',
+      'Bright synth uplifter sweeping up to a bright cutoff, radio transition, no music, no voice.',
     ],
   },
   scratch: {
-    count: 2,
+    count: 3,
     durationSeconds: 1,
     prompts: [
       'Single quick vinyl record scratch transition, clean turntablist zip, no music, no voice.',
       'Short DJ vinyl rewind and scratch, crisp and punchy, no music, no voice.',
+      'Fast double vinyl scratch flick, sharp turntablist transition, no music, no voice.',
     ],
   },
 }
@@ -89,19 +100,31 @@ async function generate(prompt, durationSeconds) {
 }
 
 const manifest = {}
-let total = 0
+let generated = 0
+let kept = 0
+
+// Incremental: existing beds are kept, only missing indices are rendered.
+// Delete a file (and its manifest entry) to force a re-render. Run with
+// SFX_FORCE=1 to re-render everything.
+const force = process.env.SFX_FORCE === '1'
 
 for (const [category, config] of Object.entries(sfxCategories)) {
   manifest[category] = []
   for (let i = 0; i < config.count; i++) {
-    const prompt = config.prompts[i % config.prompts.length]
     const file = `${category}-${i}.mp3`
+    const path = join(outDir, file)
+    if (!force && existsSync(path)) {
+      manifest[category].push(`/sfx/${file}`)
+      kept += 1
+      continue
+    }
+    const prompt = config.prompts[i % config.prompts.length]
     process.stdout.write(`Generating ${file} ... `)
     try {
       const audio = await generate(prompt, config.durationSeconds)
-      await writeFile(join(outDir, file), audio)
+      await writeFile(path, audio)
       manifest[category].push(`/sfx/${file}`)
-      total += 1
+      generated += 1
       console.log('ok')
     } catch (error) {
       console.log(`failed (${error.message})`)
@@ -110,4 +133,4 @@ for (const [category, config] of Object.entries(sfxCategories)) {
 }
 
 await writeFile(join(outDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
-console.log(`\nDone. ${total} effects written to public/sfx/, manifest updated.`)
+console.log(`\nDone. ${generated} new, ${kept} kept. ${generated + kept} effects in public/sfx/.`)
