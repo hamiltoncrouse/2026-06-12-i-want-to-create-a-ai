@@ -340,6 +340,12 @@ export function selectBreakKind(playCount: number): BreakKind {
   return breakRotation[(playCount - 1) % breakRotation.length]
 }
 
+// When a DJ has a produced spot, air it on a fixed cadence: the 4th break
+// (after the first three), then every sixth break after that.
+export function spotBreakDue(breakSeq: number): boolean {
+  return breakSeq >= 3 && (breakSeq - 3) % 6 === 0
+}
+
 export function initials(name: string) {
   return name
     .split(/\s+/)

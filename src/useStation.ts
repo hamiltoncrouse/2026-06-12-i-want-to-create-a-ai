@@ -10,6 +10,7 @@ import {
   scoreTrackForSteering,
   selectBreakKind,
   sfxCategories,
+  spotBreakDue,
 } from './data'
 import type {
   BreakKind,
@@ -904,6 +905,18 @@ export function useStation(
     [],
   )
 
+  // Resolve the kind for the break at the current sequence number. For a DJ
+  // with a produced spot, force its commercial onto the spot cadence and
+  // suppress the rotation's other commercials so the spot is the only ad.
+  const resolveKind = useCallback((): BreakKind => {
+    const seq = breakSeqRef.current
+    const hasSpot = Boolean(djSpots[djRef.current.id]?.length)
+    if (hasSpot && spotBreakDue(seq)) return 'commercial'
+    const base = selectBreakKind(seq)
+    if (hasSpot && base === 'commercial') return 'songTalk'
+    return base
+  }, [])
+
   const requestBreak = useCallback((index: number, kind: BreakKind, previousIndex?: number) => {
     const activeTracks = tracksRef.current
     const nextTrack = activeTracks[index]
@@ -937,9 +950,12 @@ export function useStation(
     if (existing) return existing
 
     // A produced spot (e.g. Johnny London's Blue Ribbon Pontiac ad) replaces
-    // the AI commercial: host lines are still voiced live, but the ring and the
-    // guest recording are fixed assets bundled with the app.
-    const spots = kind === 'commercial' ? djSpots[djRef.current.id] : undefined
+    // the AI commercial on its scheduled cadence: host lines are still voiced
+    // live, but the ring and the guest recording are fixed assets.
+    const spots =
+      kind === 'commercial' && spotBreakDue(breakSeqRef.current)
+        ? djSpots[djRef.current.id]
+        : undefined
     const spot = spots?.length ? spots[Math.floor(Math.random() * spots.length)] : undefined
 
     const promise = (async (): Promise<BreakPlan> => {
@@ -1049,7 +1065,7 @@ export function useStation(
         setPlannedNextIndex(nextIndex)
         nextIndexPromiseRef.current = Promise.resolve(nextIndex)
         if (phaseRef.current === 'song') {
-          requestBreak(nextIndex, selectBreakKind(breakSeqRef.current), fromIndex)
+          requestBreak(nextIndex, resolveKind(), fromIndex)
         }
       })()
     }, 250)
@@ -1057,7 +1073,7 @@ export function useStation(
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [findPlayableIndex, requestBreak, steering])
+  }, [findPlayableIndex, requestBreak, resolveKind, steering])
 
   const requestBreakForAir = useCallback(
     async (index: number, kind: BreakKind, previousIndex?: number) => {
@@ -1115,9 +1131,9 @@ export function useStation(
       void (async () => {
         const nextIndex = await promise
         const songsUntilBreak = Math.max(0, breakEveryRef.current - songsSinceBreakRef.current)
-        const breakKind = selectBreakKind(breakSeqRef.current)
+        const breakKind = resolveKind()
         if (songsUntilBreak === 0) {
-          requestBreak(nextIndex, selectBreakKind(breakSeqRef.current), index)
+          requestBreak(nextIndex, resolveKind(), index)
           return
         }
 
@@ -1129,7 +1145,7 @@ export function useStation(
         }
       })()
     },
-    [findPlayableIndex, findPlayableSequence, requestBreak],
+    [findPlayableIndex, findPlayableSequence, requestBreak, resolveKind],
   )
 
   const updateMediaSession = useCallback((track: Track) => {
@@ -1225,7 +1241,7 @@ export function useStation(
       const activeTracks = tracksRef.current
       if (!activeTracks.length || stopRef.current) return
 
-      const breakKind = selectBreakKind(breakSeqRef.current)
+      const breakKind = resolveKind()
       phaseRef.current = 'loading'
       setMode('loading')
       setStatus('Cueing the mic')
@@ -1297,7 +1313,7 @@ export function useStation(
       setStatus('On air')
       rampDuck(1, SWELL_MS)
     },
-    [beginSong, getSongAudio, playPlanAudio, prepareNext, rampDuck, requestBreakForAir],
+    [beginSong, getSongAudio, playPlanAudio, prepareNext, rampDuck, requestBreakForAir, resolveKind],
   )
 
   useEffect(() => {
@@ -1339,11 +1355,11 @@ export function useStation(
           nextIndexPromiseRef.current ||
           findPlayableIndex((fromIndex + 1) % Math.max(1, tracksRef.current.length))
         const resolvedIndex = await nextIndex
-        requestBreak(resolvedIndex, selectBreakKind(breakSeqRef.current), fromIndex)
+        requestBreak(resolvedIndex, resolveKind(), fromIndex)
       })()
     }, 300)
     return () => window.clearTimeout(timer)
-  }, [findPlayableIndex, listenerRequests, requestBreak])
+  }, [findPlayableIndex, listenerRequests, requestBreak, resolveKind])
 
   // Self-healing watchdog: mobile browsers reject play() or stall streams
   // after interruptions (screen lock, phone calls, flaky cell data). Retry
@@ -1417,12 +1433,12 @@ export function useStation(
     if (mode !== 'idle' || !tracks.length) return
     const timer = window.setTimeout(
       () => {
-        requestBreak(indexRef.current, selectBreakKind(breakSeqRef.current))
+        requestBreak(indexRef.current, resolveKind())
       },
       context.generatedAt ? 300 : 4000,
     )
     return () => window.clearTimeout(timer)
-  }, [mode, tracks, currentIndex, dj.id, context.generatedAt, requestBreak])
+  }, [mode, tracks, currentIndex, dj.id, context.generatedAt, requestBreak, resolveKind])
 
   const start = useCallback(() => {
     if (!tracksRef.current.length) {
