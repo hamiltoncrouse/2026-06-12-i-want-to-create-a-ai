@@ -1,4 +1,12 @@
-import type { BreakKind, DjProfile, SessionSteering, StationContext, Track, VoiceName } from './types'
+import type {
+  BreakKind,
+  DjProfile,
+  ProducedSpot,
+  SessionSteering,
+  StationContext,
+  Track,
+  VoiceName,
+} from './types'
 
 export const defaultFolderUrl = 'https://mwalk.neocities.org/music/manifest.json'
 
@@ -205,6 +213,30 @@ export const sfxCategories: Record<string, SfxCategory> = {
       'Short DJ vinyl rewind and scratch, crisp and punchy, no music, no voice.',
     ],
   },
+}
+
+// Pre-produced advertisements keyed by DJ id. When a commercial break comes up
+// for that DJ, one of these airs instead of an AI-written spot. The host lines
+// are voiced live in the DJ's voice; the "spot" parts play fixed assets.
+export const djSpots: Record<string, ProducedSpot[]> = {
+  'johnny-london': [
+    {
+      id: 'blue-ribbon-joe-goldberg',
+      title: 'Blue Ribbon Pontiac — Joe Goldberg',
+      parts: [
+        {
+          speaker: 'dj',
+          text: "Alright, you know what time it is. Let's check in with our good friend Joe Goldberg down at Blue Ribbon Pontiac. Let me give him a ring.",
+        },
+        { speaker: 'spot', audioUrl: '/audio/phone-ring.mp3' },
+        { speaker: 'spot', audioUrl: '/audio/joegoldberg.mp3' },
+        {
+          speaker: 'dj',
+          text: "Ha ha, that is Joe Goldberg, Blue Ribbon Pontiac, four hundred West Thames Street right here in Norwich. Thanks, Joe. Alright, back to the music.",
+        },
+      ],
+    },
+  ],
 }
 
 export type SfxManifest = Record<string, string[]>

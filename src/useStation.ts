@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   breakSfxCategory,
   demoTracks,
+  djSpots,
   emptySteering,
   hasSteering,
   imagingVoice,
@@ -431,6 +432,17 @@ export function useStation(
       fx.air.gain.value = 3
       fx.compressor.threshold.value = -30
       fx.compressor.ratio.value = 8
+    } else if (speaker === 'spot') {
+      // Pre-recorded assets (phone ring, guest recording): play clean and
+      // natural with only gentle leveling, no presence/air hyping.
+      fx.dry.gain.value = 1
+      fx.phone.gain.value = 0
+      fx.echo.gain.value = 0
+      fx.output.gain.value = 0.98
+      fx.presence.gain.value = 1.5
+      fx.air.gain.value = 0.5
+      fx.compressor.threshold.value = -24
+      fx.compressor.ratio.value = 4
     } else {
       fx.dry.gain.value = 1
       fx.phone.gain.value = 0
@@ -923,38 +935,64 @@ export function useStation(
     const existing = preloadRef.current.get(key)
     if (existing) return existing
 
+    // A produced spot (e.g. Johnny London's Blue Ribbon Pontiac ad) replaces
+    // the AI commercial: host lines are still voiced live, but the ring and the
+    // guest recording are fixed assets bundled with the app.
+    const spots = kind === 'commercial' ? djSpots[djRef.current.id] : undefined
+    const spot = spots?.length ? spots[Math.floor(Math.random() * spots.length)] : undefined
+
     const promise = (async (): Promise<BreakPlan> => {
       setBufferStatus('Writing the next break')
-      const breakResponse = await fetch('/api/dj-break', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          dj: djRef.current,
-          context: contextRef.current,
-          kind,
-          previousTrack: trackBrief(previousTrack),
-          nextTrack: trackBrief(nextTrack),
-          queue: activeTracks.slice(index, index + 6).map(trackBrief).filter(Boolean),
-          listenerRequests: queuedRequests,
-          steering: steeringRef.current,
-          usageTip,
-          recentScripts: recentScriptsRef.current,
-          showNotes: showNotesRef.current,
-        }),
-      })
-      const plan = (await breakResponse.json()) as BreakPlan
-      plan.usageTipId = usageTip?.id
+      const activeDj = djRef.current
+      let plan: BreakPlan
+      let segments: BreakSegment[]
+
+      if (spot) {
+        segments = spot.parts.map((part) =>
+          part.speaker === 'spot'
+            ? { speaker: 'spot', text: '', audioUrl: part.audioUrl }
+            : { speaker: 'dj', text: part.text },
+        )
+        plan = {
+          kind: 'commercial',
+          title: spot.title,
+          source: 'fallback',
+          tease: spot.title,
+          script: segments.map((segment) => segment.text).filter(Boolean).join(' '),
+          segments,
+        }
+        setBufferStatus('Cueing the spot')
+      } else {
+        const breakResponse = await fetch('/api/dj-break', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            dj: djRef.current,
+            context: contextRef.current,
+            kind,
+            previousTrack: trackBrief(previousTrack),
+            nextTrack: trackBrief(nextTrack),
+            queue: activeTracks.slice(index, index + 6).map(trackBrief).filter(Boolean),
+            listenerRequests: queuedRequests,
+            steering: steeringRef.current,
+            usageTip,
+            recentScripts: recentScriptsRef.current,
+            showNotes: showNotesRef.current,
+          }),
+        })
+        plan = (await breakResponse.json()) as BreakPlan
+        plan.usageTipId = usageTip?.id
+        segments = plan.segments?.length ? plan.segments : [{ speaker: 'dj', text: plan.script }]
+      }
       setBufferStatus('Recording the voice takes')
 
-      const activeDj = djRef.current
-      const segments: BreakSegment[] = plan.segments?.length
-        ? plan.segments
-        : [{ speaker: 'dj', text: plan.script }]
       const callerVoice = pickCompanionVoice(activeDj.voice, key)
       const reporterVoice = pickCompanionVoice([activeDj.voice, callerVoice], `${key}:reporter`)
 
       await Promise.all(
         segments.map(async (segment) => {
+          // Pre-recorded assets (ring, guest spot) already have audio.
+          if (segment.audioUrl) return
           const voice =
             segment.speaker === 'caller'
               ? callerVoice
