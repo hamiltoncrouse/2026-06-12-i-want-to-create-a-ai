@@ -1,0 +1,30 @@
+{
+  "impact": [
+    "/sfx/impact-0.mp3",
+    "/sfx/impact-1.mp3",
+    "/sfx/impact-2.mp3",
+    "/sfx/impact-3.mp3",
+    "/sfx/impact-4.mp3",
+    "/sfx/impact-5.mp3"
+  ],
+  "sweep": [
+    "/sfx/sweep-0.mp3",
+    "/sfx/sweep-1.mp3",
+    "/sfx/sweep-2.mp3",
+    "/sfx/sweep-3.mp3",
+    "/sfx/sweep-4.mp3",
+    "/sfx/sweep-5.mp3",
+    "/sfx/sweep-6.mp3",
+    "/sfx/sweep-7.mp3"
+  ],
+  "riser": [
+    "/sfx/riser-0.mp3",
+    "/sfx/riser-1.mp3",
+    "/sfx/riser-2.mp3",
+    "/sfx/riser-3.mp3"
+  ],
+  "scratch": [
+    "/sfx/scratch-0.mp3",
+    "/sfx/scratch-1.mp3"
+  ]
+}
