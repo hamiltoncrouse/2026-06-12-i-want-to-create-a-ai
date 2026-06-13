@@ -1,4 +1,4 @@
-import type { BreakKind, DjProfile, StationContext, Track, VoiceName } from './types'
+import type { BreakKind, DjProfile, SessionSteering, StationContext, Track, VoiceName } from './types'
 
 export const defaultFolderUrl = 'https://mwalk.neocities.org/music/manifest.json'
 
@@ -161,6 +161,61 @@ export const breakKindLabels: Record<BreakKind, string> = {
   caller: 'Caller request',
 }
 
+export const emptySteering: SessionSteering = {
+  targetMoods: [],
+  targetGenres: [],
+  avoidGenres: [],
+  avoidMoods: [],
+  avoidArtists: [],
+  tempos: [],
+  dayparts: [],
+}
+
+export const steeringPresets: {
+  id: string
+  label: string
+  steering: Partial<SessionSteering>
+}[] = [
+  {
+    id: 'late-night',
+    label: 'Late night',
+    steering: {
+      targetMoods: ['late-night', 'smooth', 'warm', 'reflective'],
+      tempos: ['slow', 'mid'],
+      energyRange: [1, 3],
+      dayparts: ['late-night', 'evening'],
+      note: 'Keep the hour warmer, smoother, and more after-dark.',
+    },
+  },
+  {
+    id: 'gym',
+    label: 'Gym',
+    steering: {
+      targetMoods: ['upbeat', 'bright', 'dance-floor'],
+      tempos: ['upbeat', 'fast'],
+      energyRange: [4, 5],
+      note: 'Keep the momentum high and avoid sleepy segues.',
+    },
+  },
+  {
+    id: 'familiar',
+    label: 'Familiar',
+    steering: {
+      targetMoods: ['familiar', 'warm'],
+      targetGenres: ['classic hits', 'pop rock', 'soul'],
+      note: 'Favor familiar, easy-to-recognize records.',
+    },
+  },
+  {
+    id: 'deep-cuts',
+    label: 'Deep cuts',
+    steering: {
+      avoidMoods: ['familiar'],
+      note: 'Lean a little less obvious without losing the station flow.',
+    },
+  },
+]
+
 export function formatTrackName(name: string) {
   return decodeURIComponent(name)
     .replace(/\.[a-z0-9]+$/i, '')
@@ -211,6 +266,113 @@ export function shuffleTracks<T>(list: T[]): T[] {
     ;[next[i], next[j]] = [next[j], next[i]]
   }
   return next
+}
+
+export function normalizeSteeringTerm(value: string) {
+  return value.trim().toLowerCase()
+}
+
+export function uniqueTerms(values: string[]) {
+  return [...new Set(values.map(normalizeSteeringTerm).filter(Boolean))]
+}
+
+export function mergeSteering(
+  current: SessionSteering,
+  next: Partial<SessionSteering>,
+): SessionSteering {
+  return {
+    targetMoods: uniqueTerms([...(current.targetMoods || []), ...(next.targetMoods || [])]),
+    targetGenres: uniqueTerms([...(current.targetGenres || []), ...(next.targetGenres || [])]),
+    avoidGenres: uniqueTerms([...(current.avoidGenres || []), ...(next.avoidGenres || [])]),
+    avoidMoods: uniqueTerms([...(current.avoidMoods || []), ...(next.avoidMoods || [])]),
+    avoidArtists: uniqueTerms([...(current.avoidArtists || []), ...(next.avoidArtists || [])]),
+    tempos: uniqueTerms([...(current.tempos || []), ...(next.tempos || [])]),
+    dayparts: uniqueTerms([...(current.dayparts || []), ...(next.dayparts || [])]),
+    energyRange: next.energyRange || current.energyRange,
+    note: next.note || current.note,
+    updatedAt: Date.now(),
+  }
+}
+
+export function hasSteering(steering: SessionSteering) {
+  return Boolean(
+    steering.targetMoods.length ||
+      steering.targetGenres.length ||
+      steering.avoidGenres.length ||
+      steering.avoidMoods.length ||
+      steering.avoidArtists.length ||
+      steering.tempos.length ||
+      steering.dayparts.length ||
+      steering.energyRange ||
+      steering.note,
+  )
+}
+
+function termsFromTrack(track: Track, field: 'genre' | 'mood' | 'requestTags' | 'dayparts') {
+  return (track[field] || []).map(normalizeSteeringTerm)
+}
+
+function termOverlap(trackTerms: string[], steeringTerms: string[]) {
+  if (!trackTerms.length || !steeringTerms.length) return 0
+  return steeringTerms.filter((term) =>
+    trackTerms.some((trackTerm) => trackTerm === term || trackTerm.includes(term)),
+  ).length
+}
+
+export function dominantGenre(track?: Track) {
+  return track?.genre?.[0] || track?.requestTags?.find((tag) => tag.length <= 20) || ''
+}
+
+export function steeringLabels(steering: SessionSteering) {
+  const labels = [
+    ...steering.targetMoods,
+    ...steering.targetGenres,
+    ...steering.tempos,
+    ...steering.dayparts,
+    ...(steering.energyRange ? [`energy ${steering.energyRange[0]}-${steering.energyRange[1]}`] : []),
+    ...steering.avoidGenres.map((term) => `no ${term}`),
+    ...steering.avoidMoods.map((term) => `less ${term}`),
+    ...steering.avoidArtists.map((term) => `skip ${term}`),
+  ]
+  return labels.slice(0, 5)
+}
+
+export function scoreTrackForSteering(
+  track: Track,
+  steering: SessionSteering,
+  recentTrackIds: string[] = [],
+  recentArtists: string[] = [],
+) {
+  const genres = termsFromTrack(track, 'genre')
+  const moods = termsFromTrack(track, 'mood')
+  const tags = termsFromTrack(track, 'requestTags')
+  const dayparts = termsFromTrack(track, 'dayparts')
+  const artist = normalizeSteeringTerm(track.artist || '')
+  const tempo = normalizeSteeringTerm(track.tempo || '')
+  const allTerms = [...genres, ...moods, ...tags]
+
+  let score = Number.isFinite(track.weight) ? Number(track.weight) : 1
+
+  const avoidedGenreHits = termOverlap([...genres, ...tags], steering.avoidGenres)
+  const avoidedMoodHits = termOverlap([...moods, ...tags], steering.avoidMoods)
+  const avoidedArtist = steering.avoidArtists.some((term) => artist === term || artist.includes(term))
+  if (avoidedGenreHits || avoidedMoodHits || avoidedArtist) score -= 1000
+
+  score += termOverlap([...moods, ...tags], steering.targetMoods) * 14
+  score += termOverlap([...genres, ...tags], steering.targetGenres) * 12
+  score += termOverlap(dayparts, steering.dayparts) * 5
+  if (steering.tempos.length && steering.tempos.includes(tempo)) score += 8
+  if (steering.energyRange && typeof track.energy === 'number') {
+    const [min, max] = steering.energyRange
+    if (track.energy >= min && track.energy <= max) score += 12
+    else score -= Math.min(12, Math.abs(track.energy - (track.energy < min ? min : max)) * 5)
+  }
+
+  if (track.metadataConfidence === 'low') score -= 1
+  if (recentTrackIds.includes(track.id)) score -= 80
+  if (recentArtists.includes(artist)) score -= 18
+  if (!allTerms.length && hasSteering(steering)) score -= 4
+  return score + Math.random() * 3
 }
 
 function seedHash(seed: string) {

@@ -19,6 +19,21 @@ export type Track = {
   artist: string
   url: string
   source: 'demo' | 'folder' | 'local'
+  album?: string
+  year?: number
+  genre?: string[]
+  mood?: string[]
+  energy?: number
+  tempo?: 'slow' | 'mid' | 'upbeat' | 'fast' | string
+  durationSec?: number
+  introSec?: number
+  outroSec?: number
+  facts?: string[]
+  djNotes?: string
+  requestTags?: string[]
+  dayparts?: string[]
+  weight?: number
+  metadataConfidence?: 'high' | 'medium' | 'low' | string
 }
 
 export type DjProfile = {
@@ -51,6 +66,25 @@ export type ListenerRequest = {
   at: string
 }
 
+export type SessionSteering = {
+  targetMoods: string[]
+  targetGenres: string[]
+  avoidGenres: string[]
+  avoidMoods: string[]
+  avoidArtists: string[]
+  tempos: string[]
+  dayparts: string[]
+  energyRange?: [number, number]
+  note?: string
+  updatedAt?: number
+}
+
+export type UsageTip = {
+  id: string
+  feature: 'requestLine' | 'steering' | 'customDj' | 'voicePreview'
+  text: string
+}
+
 export type BreakKind =
   | 'intro'
   | 'songTalk'
@@ -75,4 +109,5 @@ export type BreakPlan = {
   segments?: BreakSegment[]
   audioUrl?: string
   source: 'openai' | 'fallback'
+  usageTipId?: string
 }

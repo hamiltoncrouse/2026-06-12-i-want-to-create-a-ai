@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { demoTracks, imagingVoice, pickCompanionVoice, selectBreakKind } from './data'
+import {
+  demoTracks,
+  emptySteering,
+  hasSteering,
+  imagingVoice,
+  pickCompanionVoice,
+  scoreTrackForSteering,
+  selectBreakKind,
+} from './data'
 import type {
   BreakKind,
   BreakPlan,
@@ -7,8 +15,10 @@ import type {
   BreakSpeaker,
   DjProfile,
   ListenerRequest,
+  SessionSteering,
   StationContext,
   Track,
+  UsageTip,
 } from './types'
 
 const silentAudioUrl =
@@ -46,12 +56,34 @@ function artworkDataUrl(color: string) {
   return `data:image/svg+xml,${encodeURIComponent(svg)}`
 }
 
+function trackBrief(track?: Track) {
+  if (!track) return null
+  return {
+    id: track.id,
+    title: track.title,
+    artist: track.artist,
+    album: track.album,
+    year: track.year,
+    genre: track.genre?.slice(0, 4),
+    mood: track.mood?.slice(0, 4),
+    energy: track.energy,
+    tempo: track.tempo,
+    durationSec: track.durationSec,
+    facts: track.metadataConfidence === 'low' ? undefined : track.facts?.slice(0, 2),
+    djNotes: track.djNotes,
+    requestTags: track.requestTags?.slice(0, 8),
+    dayparts: track.dayparts?.slice(0, 4),
+    metadataConfidence: track.metadataConfidence,
+  }
+}
+
 export function useStation(
   dj: DjProfile,
   context: StationContext,
   breakEvery: number,
   listenerRequests: ListenerRequest[] = [],
   onRequestsAired?: (ids: string[]) => void,
+  steering: SessionSteering = emptySteering,
 ) {
   const [tracks, setTracks] = useState<Track[]>(demoTracks)
   const [currentIndex, setCurrentIndex] = useState(0)
@@ -65,6 +97,7 @@ export function useStation(
   const [progress, setProgress] = useState({ time: 0, duration: 0 })
   const [volume, setVolumeState] = useState(1)
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null)
+  const [plannedNextIndex, setPlannedNextIndex] = useState<number | null>(null)
 
   const songRef = useRef<HTMLAudioElement | null>(null)
   const breakRef = useRef<HTMLAudioElement | null>(null)
@@ -78,6 +111,7 @@ export function useStation(
   const contextRef = useRef(context)
   const listenerRequestsRef = useRef(listenerRequests)
   const onRequestsAiredRef = useRef(onRequestsAired)
+  const steeringRef = useRef(steering)
   const indexRef = useRef(0)
   const countRef = useRef(0)
   const breakSeqRef = useRef(0)
@@ -87,11 +121,15 @@ export function useStation(
   const duckRef = useRef(1)
   const rampRef = useRef<number | null>(null)
   const recentScriptsRef = useRef<string[]>([])
+  const recentTrackIdsRef = useRef<string[]>([])
+  const recentArtistsRef = useRef<string[]>([])
   const preloadRef = useRef<Map<string, Promise<BreakPlan>>>(new Map())
   const standbyLinerRef = useRef<Map<string, Promise<BreakPlan | null>>>(new Map())
   const goodTracksRef = useRef<Set<string>>(new Set())
   const badTracksRef = useRef<Set<string>>(new Set())
   const nextIndexPromiseRef = useRef<Promise<number> | null>(null)
+  const lastUsageTipBreakRef = useRef(-12)
+  const lastUsageTipIdRef = useRef('')
   const chainRef = useRef<(index: number, count: number, previousIndex?: number) => Promise<void>>(
     async () => undefined,
   )
@@ -117,6 +155,12 @@ export function useStation(
   }, [onRequestsAired])
 
   useEffect(() => {
+    steeringRef.current = steering
+    preloadRef.current.clear()
+    nextIndexPromiseRef.current = null
+  }, [steering])
+
+  useEffect(() => {
     breakEveryRef.current = Math.max(1, breakEvery)
   }, [breakEvery])
 
@@ -125,6 +169,36 @@ export function useStation(
   useEffect(() => {
     preloadRef.current.clear()
   }, [context.city])
+
+  const selectUsageTip = useCallback((kind: BreakKind): UsageTip | undefined => {
+    if (kind !== 'songTalk') return undefined
+    const currentBreak = breakSeqRef.current
+    if (currentBreak < 4 || currentBreak - lastUsageTipBreakRef.current < 8) return undefined
+    const tips: UsageTip[] = [
+      {
+        id: 'request-line',
+        feature: 'requestLine',
+        text: 'The request line is open if you want to send one up to the booth.',
+      },
+      {
+        id: 'steering',
+        feature: 'steering',
+        text: 'If you want the hour warmer, louder, or less of a style, steer the music and I will follow it.',
+      },
+      {
+        id: 'custom-dj',
+        feature: 'customDj',
+        text: 'You can build your own host anytime, but I am keeping the chair warm.',
+      },
+    ]
+    const preferred = !listenerRequestsRef.current.length
+      ? tips[0]
+      : hasSteering(steeringRef.current)
+        ? tips[1]
+        : tips[currentBreak % tips.length]
+    if (preferred.id !== lastUsageTipIdRef.current) return preferred
+    return tips.find((tip) => tip.id !== lastUsageTipIdRef.current)
+  }, [])
 
   const getSongAudio = useCallback(() => {
     if (!songRef.current) {
@@ -546,14 +620,31 @@ export function useStation(
   }, [])
 
   const findPlayableIndex = useCallback(
-    async (from: number) => {
+    async (from: number, excluded = new Set<number>()) => {
       const activeTracks = tracksRef.current
+      const scored: { index: number; score: number }[] = []
+      const blocked: number[] = []
       for (let step = 0; step < activeTracks.length; step++) {
         const index = (from + step) % activeTracks.length
+        if (excluded.has(index)) continue
         const track = activeTracks[index]
         if (!track) break
-        if (await probeTrack(track)) return index
+        if (!(await probeTrack(track))) continue
+        if (!hasSteering(steeringRef.current)) return index
+        const score = scoreTrackForSteering(
+          track,
+          steeringRef.current,
+          recentTrackIdsRef.current,
+          recentArtistsRef.current,
+        )
+        if (score <= -900) blocked.push(index)
+        else scored.push({ index, score })
       }
+      if (scored.length) {
+        scored.sort((a, b) => b.score - a.score)
+        return scored[0].index
+      }
+      if (blocked.length) return blocked[0]
       return from
     },
     [probeTrack],
@@ -564,11 +655,13 @@ export function useStation(
       const activeTracks = tracksRef.current
       if (!activeTracks.length || count <= 0) return []
       const sequence: number[] = []
+      const excluded = new Set<number>()
       let cursor = from
       const maxAttempts = Math.max(activeTracks.length * count, count)
       for (let attempt = 0; attempt < maxAttempts && sequence.length < count; attempt++) {
-        const index = await findPlayableIndex(cursor % activeTracks.length)
+        const index = await findPlayableIndex(cursor % activeTracks.length, excluded)
         sequence.push(index)
+        excluded.add(index)
         cursor = (index + 1) % activeTracks.length
       }
       return sequence
@@ -616,6 +709,17 @@ export function useStation(
     const queuedAfter = activeTracks[(index + 1) % activeTracks.length]
     const queuedRequests = listenerRequestsRef.current.slice(0, 3)
     const requestKey = queuedRequests.map((request) => request.id).join(',') || 'no-requests'
+    const usageTip = selectUsageTip(kind)
+    const steeringKey = JSON.stringify({
+      targetMoods: steeringRef.current.targetMoods,
+      targetGenres: steeringRef.current.targetGenres,
+      avoidGenres: steeringRef.current.avoidGenres,
+      avoidMoods: steeringRef.current.avoidMoods,
+      avoidArtists: steeringRef.current.avoidArtists,
+      tempos: steeringRef.current.tempos,
+      dayparts: steeringRef.current.dayparts,
+      energyRange: steeringRef.current.energyRange,
+    })
     const key = [
       index,
       kind,
@@ -623,6 +727,8 @@ export function useStation(
       nextTrack?.id || 'empty',
       queuedAfter?.id || 'no-after',
       requestKey,
+      usageTip?.id || 'no-tip',
+      steeringKey,
       djRef.current.id,
     ].join(':')
     const existing = preloadRef.current.get(key)
@@ -637,14 +743,17 @@ export function useStation(
           dj: djRef.current,
           context: contextRef.current,
           kind,
-          previousTrack,
-          nextTrack,
-          queue: activeTracks.slice(index, index + 6),
+          previousTrack: trackBrief(previousTrack),
+          nextTrack: trackBrief(nextTrack),
+          queue: activeTracks.slice(index, index + 6).map(trackBrief).filter(Boolean),
           listenerRequests: queuedRequests,
+          steering: steeringRef.current,
+          usageTip,
           recentScripts: recentScriptsRef.current,
         }),
       })
       const plan = (await breakResponse.json()) as BreakPlan
+      plan.usageTipId = usageTip?.id
       setBufferStatus('Recording the voice takes')
 
       const activeDj = djRef.current
@@ -696,7 +805,7 @@ export function useStation(
       if (oldest) preloadRef.current.delete(oldest)
     }
     return promise
-  }, [makeBackupBreak])
+  }, [makeBackupBreak, selectUsageTip])
 
   const requestBreakForAir = useCallback(
     async (index: number, kind: BreakKind, previousIndex?: number) => {
@@ -749,6 +858,7 @@ export function useStation(
       })()
       promise.catch(() => undefined)
       nextIndexPromiseRef.current = promise
+      promise.then((nextIndex) => setPlannedNextIndex(nextIndex)).catch(() => undefined)
 
       void (async () => {
         const nextIndex = await promise
@@ -820,6 +930,17 @@ export function useStation(
       } catch {
         // Some remote files cannot seek until metadata is available.
       }
+      recentTrackIdsRef.current = [
+        track.id,
+        ...recentTrackIdsRef.current.filter((id) => id !== track.id),
+      ].slice(0, 12)
+      const artist = (track.artist || '').trim().toLowerCase()
+      if (artist) {
+        recentArtistsRef.current = [
+          artist,
+          ...recentArtistsRef.current.filter((name) => name !== artist),
+        ].slice(0, 8)
+      }
       updateMediaSession(track)
       audio.play().catch(() => {
         setStatus('Tap play to enable audio')
@@ -861,6 +982,10 @@ export function useStation(
       if (breakPlan.title !== 'Standby liner') {
         const airedRequestIds = listenerRequestsRef.current.slice(0, 3).map((request) => request.id)
         if (airedRequestIds.length) onRequestsAiredRef.current?.(airedRequestIds)
+        if (breakPlan.usageTipId) {
+          lastUsageTipBreakRef.current = breakSeqRef.current
+          lastUsageTipIdRef.current = breakPlan.usageTipId
+        }
       }
 
       phaseRef.current = 'break'
@@ -1192,6 +1317,7 @@ export function useStation(
     setTracks(next)
     indexRef.current = 0
     setCurrentIndex(0)
+    setPlannedNextIndex(next.length > 1 ? 1 : null)
     setProgress({ time: 0, duration: 0 })
   }, [])
 
@@ -1243,7 +1369,12 @@ export function useStation(
     setLibrary,
     currentIndex,
     currentTrack: tracks[currentIndex] as Track | undefined,
-    nextTrack: tracks.length ? tracks[(currentIndex + 1) % tracks.length] : undefined,
+    nextTrack:
+      plannedNextIndex !== null
+        ? (tracks[plannedNextIndex] as Track | undefined)
+        : tracks.length
+          ? tracks[(currentIndex + 1) % tracks.length]
+          : undefined,
     mode,
     status,
     isOnAir,

@@ -1,19 +1,26 @@
 import {
+  Ban,
   Cloud,
+  Dumbbell,
   Headphones,
   ListMusic,
   Loader2,
   MapPin,
   Mic2,
+  Moon,
   Music2,
   Newspaper,
   Pause,
   Play,
   Plus,
   Radio,
+  RotateCcw,
   Save,
   Send,
+  SlidersHorizontal,
   SkipForward,
+  ThumbsDown,
+  ThumbsUp,
   Trash2,
   Upload,
   Volume2,
@@ -24,16 +31,29 @@ import {
   breakKindLabels,
   defaultFolderUrl,
   djPalette,
+  dominantGenre,
   emptyContext,
+  emptySteering,
   formatTime,
+  hasSteering,
   initials,
+  mergeSteering,
   presetDjs,
   selectBreakKind,
   shuffleTracks,
   splitArtistTitle,
+  steeringLabels,
+  steeringPresets,
   voiceOptions,
 } from './data'
-import type { DjProfile, ListenerRequest, StationContext, Track, VoiceName } from './types'
+import type {
+  DjProfile,
+  ListenerRequest,
+  SessionSteering,
+  StationContext,
+  Track,
+  VoiceName,
+} from './types'
 import { useStation } from './useStation'
 import { Visualizer } from './Visualizer'
 
@@ -58,6 +78,36 @@ const blankDraft: DjProfile = {
   style: 'Friendly, witty, specific, concise, and natural on mic.',
   backstory: 'A station host who loves connecting songs to local life.',
   color: '#e0b13b',
+}
+
+function restoreSteering(): SessionSteering {
+  const saved = localStorage.getItem('ai-dj-session-steering')
+  if (!saved) return emptySteering
+  try {
+    const parsed = JSON.parse(saved) as Partial<SessionSteering>
+    return {
+      ...emptySteering,
+      ...parsed,
+      targetMoods: Array.isArray(parsed.targetMoods) ? parsed.targetMoods : [],
+      targetGenres: Array.isArray(parsed.targetGenres) ? parsed.targetGenres : [],
+      avoidGenres: Array.isArray(parsed.avoidGenres) ? parsed.avoidGenres : [],
+      avoidMoods: Array.isArray(parsed.avoidMoods) ? parsed.avoidMoods : [],
+      avoidArtists: Array.isArray(parsed.avoidArtists) ? parsed.avoidArtists : [],
+      tempos: Array.isArray(parsed.tempos) ? parsed.tempos : [],
+      dayparts: Array.isArray(parsed.dayparts) ? parsed.dayparts : [],
+    }
+  } catch {
+    localStorage.removeItem('ai-dj-session-steering')
+    return emptySteering
+  }
+}
+
+function cleanSteeringTerm(value: string) {
+  return value
+    .replace(/\b(music|songs|tracks|records|please|this session|session|for now|in|anymore)\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 32)
 }
 
 function App() {
@@ -95,6 +145,8 @@ function App() {
   })
   const [requestDraft, setRequestDraft] = useState('')
   const [listenerRequests, setListenerRequests] = useState<ListenerRequest[]>([])
+  const [steering, setSteering] = useState<SessionSteering>(restoreSteering)
+  const [steeringDraft, setSteeringDraft] = useState('')
   const [previewingVoice, setPreviewingVoice] = useState(false)
   const [voicePreviewStatus, setVoicePreviewStatus] = useState('')
   const previewAudioRef = useRef<HTMLAudioElement | null>(null)
@@ -113,6 +165,7 @@ function App() {
     breakEvery,
     listenerRequests,
     handleRequestsAired,
+    steering,
   )
   const {
     tracks,
@@ -140,6 +193,9 @@ function App() {
   } = station
 
   const targetCity = citySource === 'dj' ? selectedDj.city : stationCity || 'auto'
+  const activeSteering = hasSteering(steering)
+  const steeringSummary = steeringLabels(steering)
+  const currentGenre = dominantGenre(currentTrack)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -162,6 +218,10 @@ function App() {
     const interval = window.setInterval(() => setContextEpoch((epoch) => epoch + 1), 10 * 60 * 1000)
     return () => window.clearInterval(interval)
   }, [])
+
+  useEffect(() => {
+    localStorage.setItem('ai-dj-session-steering', JSON.stringify(steering))
+  }, [steering])
 
   const applyStationCity = useCallback(() => {
     const next = cityDraft.trim()
@@ -317,6 +377,79 @@ function App() {
     setListenerRequests((requests) => requests.filter((request) => request.id !== id))
   }, [])
 
+  const applyPresetSteering = useCallback((presetId: string) => {
+    const preset = steeringPresets.find((item) => item.id === presetId)
+    if (!preset) return
+    setSteering((current) => mergeSteering(current, preset.steering))
+  }, [])
+
+  const resetSteering = useCallback(() => {
+    setSteering({ ...emptySteering })
+  }, [])
+
+  const moreLikeCurrent = useCallback(() => {
+    if (!currentTrack) return
+    const energy = typeof currentTrack.energy === 'number' ? currentTrack.energy : undefined
+    setSteering((current) =>
+      mergeSteering(current, {
+        targetGenres: currentTrack.genre?.slice(0, 2) || [],
+        targetMoods: currentTrack.mood?.slice(0, 2) || [],
+        tempos: currentTrack.tempo ? [currentTrack.tempo] : [],
+        energyRange: energy ? [Math.max(1, energy - 1), Math.min(5, energy + 1)] : current.energyRange,
+        note: `More like ${currentTrack.title} by ${currentTrack.artist}.`,
+      }),
+    )
+  }, [currentTrack])
+
+  const lessLikeCurrent = useCallback(() => {
+    if (!currentTrack) return
+    setSteering((current) =>
+      mergeSteering(current, {
+        avoidGenres: currentTrack.genre?.slice(0, 1) || [],
+        avoidMoods: currentTrack.mood?.slice(0, 1) || [],
+        note: `Move away from the feel of ${currentTrack.title}.`,
+      }),
+    )
+  }, [currentTrack])
+
+  const avoidCurrentGenre = useCallback(() => {
+    if (!currentGenre) return
+    setSteering((current) =>
+      mergeSteering(current, {
+        avoidGenres: [currentGenre],
+        note: `Avoid ${currentGenre} for this session.`,
+      }),
+    )
+  }, [currentGenre])
+
+  const submitSteeringDraft = useCallback(() => {
+    const text = steeringDraft.trim().replace(/\s+/g, ' ').slice(0, 120)
+    if (!text) return
+    const normalized = text.toLowerCase()
+    const next: Partial<SessionSteering> = { note: text }
+    if (/\b(late night|night|smooth|chill|mellow)\b/.test(normalized)) {
+      next.targetMoods = ['late-night', 'smooth', 'warm']
+      next.tempos = ['slow', 'mid']
+      next.energyRange = [1, 3]
+    }
+    if (/\b(gym|workout|uptempo|up tempo|fast|high energy|dance)\b/.test(normalized)) {
+      next.targetMoods = ['upbeat', 'bright', 'dance-floor']
+      next.tempos = ['upbeat', 'fast']
+      next.energyRange = [4, 5]
+    }
+    const avoidMatch = normalized.match(/\b(?:no more|no|less|avoid|skip)\s+([a-z0-9 &-]{2,40})/)
+    if (avoidMatch) {
+      const avoided = cleanSteeringTerm(avoidMatch[1])
+      if (avoided) next.avoidGenres = [avoided]
+    }
+    const genreMatches = ['disco', 'funk', 'rock', 'soul', 'pop', 'jazz', 'r&b', 'country'].filter(
+      (term) => normalized.includes(term) && !next.avoidGenres?.includes(term),
+    )
+    if (!avoidMatch && genreMatches.length) next.targetGenres = genreMatches
+    setSteering((current) => mergeSteering(current, next))
+    setSteeringDraft('')
+  }, [steeringDraft])
+
   const progressPct = progress.duration ? (progress.time / progress.duration) * 100 : 0
   const volumePct = volume * 100
 
@@ -471,6 +604,83 @@ function App() {
                       <span>{request.text}</span>
                       <small>{request.at}</small>
                     </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="steeringPanel">
+              <div className="steeringHeader">
+                <span className="upNextLabel">
+                  <SlidersHorizontal size={13} aria-hidden="true" />
+                  Steer DJ
+                </span>
+                <button
+                  className="resetSteering"
+                  type="button"
+                  onClick={resetSteering}
+                  disabled={!activeSteering}
+                  aria-label="Reset steering"
+                >
+                  <RotateCcw size={15} />
+                </button>
+              </div>
+              <div className="steeringOptions">
+                {steeringPresets.map((preset) => (
+                  <button
+                    className="steerChip"
+                    key={preset.id}
+                    type="button"
+                    onClick={() => applyPresetSteering(preset.id)}
+                  >
+                    {preset.id === 'late-night' ? (
+                      <Moon size={15} aria-hidden="true" />
+                    ) : preset.id === 'gym' ? (
+                      <Dumbbell size={15} aria-hidden="true" />
+                    ) : (
+                      <SlidersHorizontal size={15} aria-hidden="true" />
+                    )}
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+              <div className="steeringRow">
+                <input
+                  value={steeringDraft}
+                  onChange={(event) => setSteeringDraft(event.target.value)}
+                  onKeyDown={(event) => event.key === 'Enter' && submitSteeringDraft()}
+                  placeholder="Late night, uptempo gym, no disco"
+                  aria-label="Steer the DJ with a music preference"
+                  maxLength={120}
+                />
+                <button
+                  className="iconButton"
+                  type="button"
+                  onClick={submitSteeringDraft}
+                  disabled={!steeringDraft.trim()}
+                  aria-label="Apply steering"
+                >
+                  <Send size={18} />
+                </button>
+              </div>
+              <div className="steeringActions">
+                <button type="button" onClick={moreLikeCurrent} disabled={!currentTrack}>
+                  <ThumbsUp size={15} aria-hidden="true" />
+                  More like this
+                </button>
+                <button type="button" onClick={lessLikeCurrent} disabled={!currentTrack}>
+                  <ThumbsDown size={15} aria-hidden="true" />
+                  Less like this
+                </button>
+                <button type="button" onClick={avoidCurrentGenre} disabled={!currentGenre}>
+                  <Ban size={15} aria-hidden="true" />
+                  {currentGenre ? `No ${currentGenre}` : 'No style'}
+                </button>
+              </div>
+              {activeSteering && (
+                <div className="steeringSummary">
+                  {steeringSummary.map((label) => (
+                    <span key={label}>{label}</span>
                   ))}
                 </div>
               )}
@@ -728,6 +938,13 @@ function App() {
                   <span className="trackMeta">
                     <strong>{track.title}</strong>
                     <small>{track.artist}</small>
+                    {(track.year || track.genre?.length || track.mood?.length) && (
+                      <small className="trackTags">
+                        {[track.year, ...(track.genre || []).slice(0, 2), ...(track.mood || []).slice(0, 1)]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </small>
+                    )}
                   </span>
                   <span className="sourceChip">{track.source}</span>
                 </button>

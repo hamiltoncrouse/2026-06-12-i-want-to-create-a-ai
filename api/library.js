@@ -33,6 +33,64 @@ function splitArtistTitle(name) {
   return { artist: 'Unknown Artist', title: cleaned || 'Untitled Track' }
 }
 
+function stringArray(value, maxItems = 8, maxLength = 80) {
+  if (!Array.isArray(value)) return undefined
+  const cleaned = value
+    .map((item) => String(item || '').trim())
+    .filter(Boolean)
+    .slice(0, maxItems)
+    .map((item) => item.slice(0, maxLength))
+  return cleaned.length ? cleaned : undefined
+}
+
+function finiteNumber(value, min, max) {
+  const number = Number(value)
+  if (!Number.isFinite(number)) return undefined
+  return Math.min(max, Math.max(min, number))
+}
+
+function optionalString(value, maxLength = 220) {
+  const text = String(value || '').trim().replace(/\s+/g, ' ')
+  return text ? text.slice(0, maxLength) : undefined
+}
+
+function trackMetadata(item) {
+  if (!item || typeof item !== 'object') return {}
+  const metadata = {}
+  const album = optionalString(item.album, 120)
+  const tempo = optionalString(item.tempo, 24)
+  const djNotes = optionalString(item.djNotes, 240)
+  const metadataConfidence = optionalString(item.metadataConfidence, 20)
+  const year = finiteNumber(item.year, 1900, 2100)
+  const energy = finiteNumber(item.energy, 1, 5)
+  const durationSec = finiteNumber(item.durationSec, 1, 60 * 60)
+  const introSec = finiteNumber(item.introSec, 0, 600)
+  const outroSec = finiteNumber(item.outroSec, 0, 600)
+  const weight = finiteNumber(item.weight, 0.1, 10)
+  const genre = stringArray(item.genre)
+  const mood = stringArray(item.mood)
+  const facts = stringArray(item.facts, 3, 160)
+  const requestTags = stringArray(item.requestTags, 16, 80)
+  const dayparts = stringArray(item.dayparts, 6, 40)
+
+  if (album) metadata.album = album
+  if (typeof year === 'number') metadata.year = Math.round(year)
+  if (genre) metadata.genre = genre
+  if (mood) metadata.mood = mood
+  if (typeof energy === 'number') metadata.energy = Math.round(energy)
+  if (tempo) metadata.tempo = tempo
+  if (typeof durationSec === 'number') metadata.durationSec = Math.round(durationSec)
+  if (typeof introSec === 'number') metadata.introSec = Math.round(introSec)
+  if (typeof outroSec === 'number') metadata.outroSec = Math.round(outroSec)
+  if (facts) metadata.facts = facts
+  if (djNotes) metadata.djNotes = djNotes
+  if (requestTags) metadata.requestTags = requestTags
+  if (dayparts) metadata.dayparts = dayparts
+  if (typeof weight === 'number') metadata.weight = Number(weight.toFixed(2))
+  if (metadataConfidence) metadata.metadataConfidence = metadataConfidence
+  return metadata
+}
+
 function trackFromManifestItem(item, index, manifestUrl) {
   const file = typeof item === 'string' ? item : item.file || item.url || item.href || item.path
   if (!file || !audioExtensions.test(file)) return null
@@ -47,6 +105,7 @@ function trackFromManifestItem(item, index, manifestUrl) {
     artist: item.artist || parsed.artist,
     url,
     source: 'folder',
+    ...trackMetadata(item),
   }
 }
 
