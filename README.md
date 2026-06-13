@@ -67,6 +67,22 @@ npx vercel dev --yes
 
 Set `OPENAI_API_KEY` in `.env.local` for OpenAI-backed scripts and MP3 voices.
 
+## Station transition sound effects
+
+Airbreak opens produced breaks (bumpers, show opens, news, requests) with
+transition beds. These are pre-generated once with the ElevenLabs Sound
+Effects API and reused at runtime — the app does not call ElevenLabs while on
+air. To render the pool:
+
+```bash
+ELEVENLABS_API_KEY=sk_... node scripts/generate-sfx.mjs
+```
+
+This writes ~20 effects to `public/sfx/` plus a `manifest.json`; commit them.
+The player picks a random bed per transition. If the pool is absent, `/api/sfx`
+generates one bed per category on demand (when `ELEVENLABS_API_KEY` is set in
+the environment), and bumpers fall back to a built-in synthesized stinger.
+
 ## Vercel deployment
 
 Set these environment variables in the Vercel project:
@@ -75,6 +91,7 @@ Set these environment variables in the Vercel project:
 OPENAI_API_KEY
 OPENAI_SCRIPT_MODEL=gpt-5.4-mini
 OPENAI_TTS_MODEL=gpt-4o-mini-tts
+ELEVENLABS_API_KEY
 ```
 
 Then deploy:

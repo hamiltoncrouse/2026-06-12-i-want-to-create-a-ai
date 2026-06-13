@@ -161,6 +161,64 @@ export const breakKindLabels: Record<BreakKind, string> = {
   caller: 'Caller request',
 }
 
+// Station transition beds are generated once by scripts/generate-sfx.mjs (via
+// the ElevenLabs Sound Effects API) into public/sfx/, then reused at runtime —
+// no real-time generation. Each category holds several prompt variations; the
+// generator renders `count` files per category and the player picks at random.
+export type SfxCategory = { count: number; durationSeconds: number; prompts: string[] }
+
+export const sfxCategories: Record<string, SfxCategory> = {
+  impact: {
+    count: 6,
+    durationSeconds: 1.5,
+    prompts: [
+      'Punchy radio station imaging stinger: a fast whoosh sweeping down into a deep bass boom impact, clean and produced, no music, no voice.',
+      'Hard-hitting radio drop: short reverse swell into a sub-bass slam with a metallic tail, no music, no voice.',
+      'Bright broadcast impact: quick airy whoosh into a tight punchy boom, energetic station imaging, no music, no voice.',
+      'Cinematic radio bumper hit: deep boom with a short downward whoosh and a clean tail, no music, no voice.',
+    ],
+  },
+  sweep: {
+    count: 8,
+    durationSeconds: 1.1,
+    prompts: [
+      'Short radio transition whoosh sweeping downward into a song, smooth airy noise sweep, no music, no voice.',
+      'Quick noise sweep transition, soft airy downward whoosh, clean radio imaging, no music, no voice.',
+      'Filtered white-noise sweep sliding down into a beat, modern radio transition, no music, no voice.',
+      'Light breezy whoosh transition between songs, smooth and short, no music, no voice.',
+    ],
+  },
+  riser: {
+    count: 4,
+    durationSeconds: 1.3,
+    prompts: [
+      'Quick upward riser sweep building into a drop, energetic radio imaging transition, no music, no voice.',
+      'Rising noise swell building tension into a cut, bright radio transition, no music, no voice.',
+      'Short ascending whoosh riser into an impact, punchy station imaging, no music, no voice.',
+    ],
+  },
+  scratch: {
+    count: 2,
+    durationSeconds: 1,
+    prompts: [
+      'Single quick vinyl record scratch transition, clean turntablist zip, no music, no voice.',
+      'Short DJ vinyl rewind and scratch, crisp and punchy, no music, no voice.',
+    ],
+  },
+}
+
+export type SfxManifest = Record<string, string[]>
+
+// Which transition category each break kind opens with (null = none).
+export const breakSfxCategory: Record<BreakKind, keyof typeof sfxCategories | null> = {
+  intro: 'riser',
+  songTalk: null,
+  newsWeather: 'sweep',
+  commercial: 'sweep',
+  bumper: 'impact',
+  caller: 'scratch',
+}
+
 export const emptySteering: SessionSteering = {
   targetMoods: [],
   targetGenres: [],

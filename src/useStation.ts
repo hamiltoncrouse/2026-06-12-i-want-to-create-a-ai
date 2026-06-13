@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
+  breakSfxCategory,
   demoTracks,
   emptySteering,
   hasSteering,
@@ -7,6 +8,7 @@ import {
   pickCompanionVoice,
   scoreTrackForSteering,
   selectBreakKind,
+  sfxCategories,
 } from './data'
 import type {
   BreakKind,
@@ -101,6 +103,9 @@ export function useStation(
 
   const songRef = useRef<HTMLAudioElement | null>(null)
   const breakRef = useRef<HTMLAudioElement | null>(null)
+  const sfxRef = useRef<HTMLAudioElement | null>(null)
+  const sfxManifestRef = useRef<Record<string, string[]> | null>(null)
+  const sfxRuntimeCacheRef = useRef<Map<string, Promise<string | null>>>(new Map())
   const audioCtxRef = useRef<AudioContext | null>(null)
   const analyserNodeRef = useRef<AnalyserNode | null>(null)
   const fxRef = useRef<VoiceFx | null>(null)
@@ -419,6 +424,76 @@ export function useStation(
     }
   }, [])
 
+  // Transition beds are pre-generated into public/sfx/ and listed in a
+  // manifest. Load it once; if it is missing we fall back to runtime
+  // generation, then to the synth stinger.
+  const loadSfxManifest = useCallback(async () => {
+    if (sfxManifestRef.current) return sfxManifestRef.current
+    try {
+      const response = await fetch('/sfx/manifest.json')
+      // A missing manifest may 404 or (under the SPA dev server) return the
+      // HTML shell; only parse a real JSON document.
+      const isJson = response.ok && response.headers.get('content-type')?.includes('json')
+      sfxManifestRef.current = isJson ? ((await response.json()) as Record<string, string[]>) : {}
+    } catch {
+      sfxManifestRef.current = {}
+    }
+    return sfxManifestRef.current
+  }, [])
+
+  // Fallback only: generate one bed on demand if no pre-generated pool exists.
+  const getRuntimeSfx = useCallback((category: string) => {
+    const config = sfxCategories[category]
+    if (!config) return Promise.resolve(null)
+    const cached = sfxRuntimeCacheRef.current.get(category)
+    if (cached) return cached
+    const promise = (async (): Promise<string | null> => {
+      const response = await fetch('/api/sfx', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: config.prompts[0], durationSeconds: config.durationSeconds }),
+      })
+      if (!response.ok || !response.headers.get('content-type')?.includes('audio')) return null
+      return URL.createObjectURL(await response.blob())
+    })().catch(() => null)
+    sfxRuntimeCacheRef.current.set(category, promise)
+    return promise
+  }, [])
+
+  const playSfx = useCallback(
+    async (category: string) => {
+      const manifest = await loadSfxManifest()
+      const pool = manifest[category]
+      // Prefer a random bed from the pre-generated pool; else generate once.
+      const url = pool?.length
+        ? pool[Math.floor(Math.random() * pool.length)]
+        : await getRuntimeSfx(category)
+      if (!url || stopRef.current) return false
+      return new Promise<boolean>((resolve) => {
+        if (!sfxRef.current) {
+          sfxRef.current = new Audio()
+          sfxRef.current.preload = 'auto'
+        }
+        const audio = sfxRef.current
+        let settled = false
+        const done = (ok: boolean) => {
+          if (settled) return
+          settled = true
+          resolve(ok)
+        }
+        audio.onended = () => done(true)
+        audio.onerror = () => done(false)
+        audio.volume = masterRef.current
+        audio.src = url
+        audio.load()
+        audio.play().catch(() => done(false))
+        // Safety cap so a long or stalled effect never holds up the mic.
+        window.setTimeout(() => done(true), 2600)
+      })
+    },
+    [getRuntimeSfx, loadSfxManifest],
+  )
+
   const playStinger = useCallback(() => {
     // A synthesized whoosh-and-boom under station bumpers.
     const ctx = audioCtxRef.current
@@ -513,6 +588,17 @@ export function useStation(
         voiced.push({ speaker: 'dj', text: plan.script, audioUrl: plan.audioUrl })
       }
 
+      // Open the transition with a produced sound effect, whatever voice
+      // follows. Prefer a pre-generated ElevenLabs bed; if none is available,
+      // bumpers still get the synth stinger so the imaging never falls flat.
+      const sfxCategory = breakSfxCategory[plan.kind]
+      const playedSfx = sfxCategory ? await playSfx(sfxCategory) : false
+      if (!playedSfx && plan.kind === 'bumper') {
+        playStinger()
+        await new Promise((resolve) => window.setTimeout(resolve, 260))
+      }
+      if (stopRef.current) return
+
       if (!voiced.length) {
         const words = plan.script.split(/\s+/).length
         const overlapDelay = Math.max(
@@ -525,11 +611,6 @@ export function useStation(
         return
       }
 
-      if (plan.kind === 'bumper') {
-        playStinger()
-        await new Promise((resolve) => window.setTimeout(resolve, 260))
-      }
-
       for (let i = 0; i < voiced.length; i++) {
         if (stopRef.current) break
         setVoiceEffect(voiced[i].speaker)
@@ -538,7 +619,7 @@ export function useStation(
       }
       setVoiceEffect('dj')
     },
-    [playAudioUrl, playStinger, setVoiceEffect, speakFallback],
+    [playAudioUrl, playSfx, playStinger, setVoiceEffect, speakFallback],
   )
 
   const hasVoicedAudio = useCallback((plan: BreakPlan) => {
@@ -1229,6 +1310,15 @@ export function useStation(
     }
     ensureAudioGraph()
     requestStandbyLiner()
+    // Load the transition-bed manifest so the first produced break is instant.
+    void loadSfxManifest()
+    // Unlock the SFX element inside the user gesture for mobile autoplay.
+    if (!sfxRef.current) {
+      sfxRef.current = new Audio()
+      sfxRef.current.preload = 'auto'
+    }
+    sfxRef.current.src = silentAudioUrl
+    sfxRef.current.play().catch(() => undefined)
     // Prime both elements inside the user gesture so later src swaps autoplay.
     const breakAudio = getBreakAudio()
     breakAudio.loop = true
@@ -1264,6 +1354,7 @@ export function useStation(
     findPlayableIndex,
     getBreakAudio,
     getSongAudio,
+    loadSfxManifest,
     playBreakThenSong,
     requestStandbyLiner,
   ])
