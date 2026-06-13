@@ -34,6 +34,10 @@ type VoiceFx = {
   dry: GainNode
   phone: GainNode
   echo: GainNode
+  output: GainNode
+  compressor: DynamicsCompressorNode
+  presence: BiquadFilterNode
+  air: BiquadFilterNode
 }
 
 function artworkDataUrl(color: string) {
@@ -181,10 +185,13 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
         node.fftSize = 256
         node.smoothingTimeConstant = 0.8
 
+        const voiceBus = ctx.createGain()
+        voiceBus.gain.value = 1
+
         const dry = ctx.createGain()
         dry.gain.value = 1
         source.connect(dry)
-        dry.connect(node)
+        dry.connect(voiceBus)
 
         const phoneHp = ctx.createBiquadFilter()
         phoneHp.type = 'highpass'
@@ -203,7 +210,7 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
         phoneHp.connect(phoneLp)
         phoneLp.connect(phonePeak)
         phonePeak.connect(phone)
-        phone.connect(node)
+        phone.connect(voiceBus)
 
         const echoDelay = ctx.createDelay(1)
         echoDelay.delayTime.value = 0.17
@@ -215,12 +222,60 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
         echoDelay.connect(echoFeedback)
         echoFeedback.connect(echoDelay)
         echoDelay.connect(echo)
-        echo.connect(node)
+        echo.connect(voiceBus)
+
+        const voiceLowCut = ctx.createBiquadFilter()
+        voiceLowCut.type = 'highpass'
+        voiceLowCut.frequency.value = 85
+        voiceLowCut.Q.value = 0.7
+
+        const mudCut = ctx.createBiquadFilter()
+        mudCut.type = 'peaking'
+        mudCut.frequency.value = 260
+        mudCut.gain.value = -2.5
+        mudCut.Q.value = 1
+
+        const presence = ctx.createBiquadFilter()
+        presence.type = 'peaking'
+        presence.frequency.value = 3200
+        presence.gain.value = 3.5
+        presence.Q.value = 0.9
+
+        const air = ctx.createBiquadFilter()
+        air.type = 'highshelf'
+        air.frequency.value = 7600
+        air.gain.value = 1.8
+
+        const compressor = ctx.createDynamicsCompressor()
+        compressor.threshold.value = -25
+        compressor.knee.value = 18
+        compressor.ratio.value = 5.5
+        compressor.attack.value = 0.006
+        compressor.release.value = 0.16
+
+        const limiter = ctx.createDynamicsCompressor()
+        limiter.threshold.value = -4
+        limiter.knee.value = 0
+        limiter.ratio.value = 18
+        limiter.attack.value = 0.002
+        limiter.release.value = 0.08
+
+        const output = ctx.createGain()
+        output.gain.value = 0.95
+
+        voiceBus.connect(voiceLowCut)
+        voiceLowCut.connect(mudCut)
+        mudCut.connect(presence)
+        presence.connect(air)
+        air.connect(compressor)
+        compressor.connect(limiter)
+        limiter.connect(output)
+        output.connect(node)
 
         node.connect(ctx.destination)
         audioCtxRef.current = ctx
         analyserNodeRef.current = node
-        fxRef.current = { dry, phone, echo }
+        fxRef.current = { dry, phone, echo, output, compressor, presence, air }
         setAnalyser(node)
       }
       audioCtxRef.current.resume().catch(() => undefined)
@@ -234,21 +289,41 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
     if (!fx) return
     if (speaker === 'caller') {
       fx.dry.gain.value = 0
-      fx.phone.gain.value = 1.7
+      fx.phone.gain.value = 1.25
       fx.echo.gain.value = 0
+      fx.output.gain.value = 0.95
+      fx.presence.gain.value = 2.5
+      fx.air.gain.value = 0.5
+      fx.compressor.threshold.value = -22
+      fx.compressor.ratio.value = 4.5
     } else if (speaker === 'reporter') {
       // A lighter "remote line" blend for field reports.
       fx.dry.gain.value = 0.35
       fx.phone.gain.value = 1.1
       fx.echo.gain.value = 0
+      fx.output.gain.value = 0.96
+      fx.presence.gain.value = 3
+      fx.air.gain.value = 1.2
+      fx.compressor.threshold.value = -24
+      fx.compressor.ratio.value = 5
     } else if (speaker === 'imaging') {
-      fx.dry.gain.value = 1
+      fx.dry.gain.value = 1.05
       fx.phone.gain.value = 0
-      fx.echo.gain.value = 0.42
+      fx.echo.gain.value = 0.5
+      fx.output.gain.value = 1
+      fx.presence.gain.value = 5
+      fx.air.gain.value = 3
+      fx.compressor.threshold.value = -30
+      fx.compressor.ratio.value = 8
     } else {
       fx.dry.gain.value = 1
       fx.phone.gain.value = 0
       fx.echo.gain.value = 0
+      fx.output.gain.value = 0.98
+      fx.presence.gain.value = 3.5
+      fx.air.gain.value = 1.8
+      fx.compressor.threshold.value = -25
+      fx.compressor.ratio.value = 5.5
     }
   }, [])
 
