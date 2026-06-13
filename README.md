@@ -8,6 +8,12 @@ Airbreak is your personal AI radio station, built as a mobile-first web app and 
 - Live radial audio visualizer around the vinyl — real waveform data while the DJ talks, ambient animation during songs.
 - Real-radio talk-ups: the DJ speaks dry, the next song fades in under the last five seconds of the talk, then swells to full volume.
 - A real station clock: song talk, station bumpers, fictional commercials, listener call-in requests, and news & weather rotate between songs, with a control for how often the DJ talks (every song / 2 / 3 / 5).
+- A listener request line: type a request or dedication and the DJ reads it on air at the next break — and if it matches a song in the library, the station plays it next.
+- Verified music facts: a track-intel API checks MusicBrainz and Wikipedia so the DJ talks about real artists and release years instead of inventing them.
+- Show memory: the DJ keeps notes across breaks — promises, running bits, sponsor lore — and pays off teases instead of forgetting them.
+- Top-of-the-hour legal station IDs, like real American radio.
+- A broadcast mic chain (compression, presence EQ, makeup gain) so every voice sounds processed like FM.
+- A sleep timer (15 / 30 / 60 minutes) for bedside listening.
 - Multi-voice breaks: callers speak in a different voice through a phone-line filter, and a station colleague (news desk, traffic copter, or sports desk) introduces themselves and files reports in a third voice.
 - Produced bumpers: a deep imaging voice with slap-echo over a synthesized whoosh-and-boom stinger.
 - Zero dead air: the opening break is written and voiced while the station is idle, and the next break is produced as soon as a song starts.

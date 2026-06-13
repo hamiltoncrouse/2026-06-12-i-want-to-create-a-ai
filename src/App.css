@@ -546,6 +546,53 @@ input[type='range']:disabled::-webkit-slider-thumb {
   padding-top: 4px;
 }
 
+.requestRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 8px 15px;
+  border: 1px solid color-mix(in srgb, var(--dj) 35%, var(--line));
+  border-radius: 16px;
+  background: var(--card);
+  color: var(--dj);
+}
+
+.requestRow input {
+  flex: 1;
+  min-height: 38px;
+  padding: 6px 2px;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+}
+
+.requestRow input:focus-visible {
+  outline: none;
+}
+
+.requestRow .iconButton {
+  width: auto;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 11px;
+  background: var(--dj);
+  border-color: var(--dj);
+  color: #0c0d10;
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.requestPending {
+  margin: -6px 2px 0;
+}
+
+.sleepLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+}
+
 .freqChip.active {
   color: #0c0d10;
   background: var(--dj);

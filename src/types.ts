@@ -52,6 +52,15 @@ export type BreakKind =
   | 'commercial'
   | 'bumper'
   | 'caller'
+  | 'legalId'
+  | 'request'
+
+export type TrackIntel = {
+  artist: string
+  title: string
+  year?: string
+  bio?: string
+}
 
 export type BreakSpeaker = 'dj' | 'caller' | 'reporter' | 'imaging'
 
@@ -66,6 +75,7 @@ export type BreakPlan = {
   title: string
   script: string
   tease: string
+  showNote?: string
   segments?: BreakSegment[]
   audioUrl?: string
   source: 'openai' | 'fallback'

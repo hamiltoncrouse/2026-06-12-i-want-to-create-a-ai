@@ -4,9 +4,11 @@ import {
   Loader2,
   MapPin,
   Mic2,
+  Moon,
   Music2,
   Newspaper,
   Pause,
+  Phone,
   Play,
   Plus,
   Radio,
@@ -119,7 +121,14 @@ function App() {
     skip,
     playTrack,
     seek,
+    submitRequest,
+    pendingRequest,
   } = station
+
+  const [requestDraft, setRequestDraft] = useState('')
+  const [sleepChoice, setSleepChoice] = useState<number | null>(null)
+  const [sleepUntil, setSleepUntil] = useState<number | null>(null)
+  const [sleepLeft, setSleepLeft] = useState(0)
 
   const targetCity = citySource === 'dj' ? selectedDj.city : stationCity || 'auto'
 
@@ -159,6 +168,35 @@ function App() {
   const updateCitySource = useCallback((value: 'dj' | 'listener') => {
     setCitySource(value)
     localStorage.setItem('ai-dj-city-source', value)
+  }, [])
+
+  const sendRequest = useCallback(() => {
+    if (!requestDraft.trim()) return
+    submitRequest(requestDraft)
+    setRequestDraft('')
+  }, [requestDraft, submitRequest])
+
+  // Sleep timer: pause the station when time is up.
+  useEffect(() => {
+    if (!sleepUntil) return
+    const interval = window.setInterval(() => {
+      const left = sleepUntil - Date.now()
+      if (left <= 0) {
+        setSleepUntil(null)
+        setSleepChoice(null)
+        setSleepLeft(0)
+        pause()
+        return
+      }
+      setSleepLeft(left)
+    }, 10000)
+    return () => window.clearInterval(interval)
+  }, [sleepUntil, pause])
+
+  const toggleSleep = useCallback((minutes: number | null) => {
+    setSleepChoice(minutes)
+    setSleepUntil(minutes ? Date.now() + minutes * 60 * 1000 : null)
+    setSleepLeft(minutes ? minutes * 60 * 1000 : 0)
   }, [])
 
   const handleToggle = useCallback(() => {
@@ -365,6 +403,31 @@ function App() {
               </div>
             )}
 
+            <form
+              className="requestRow"
+              onSubmit={(event) => {
+                event.preventDefault()
+                sendRequest()
+              }}
+            >
+              <Phone size={17} aria-hidden="true" />
+              <input
+                value={requestDraft}
+                onChange={(event) => setRequestDraft(event.target.value)}
+                placeholder={`Request line — ask ${selectedDj.name.split(' ')[0]} for a song or shoutout`}
+                aria-label="Request line"
+                maxLength={280}
+              />
+              <button className="iconButton" type="submit" aria-label="Send request">
+                Send
+              </button>
+            </form>
+            {pendingRequest && (
+              <p className="hintLine requestPending">
+                On deck for the next break: “{pendingRequest}”
+              </p>
+            )}
+
             <div className="freqRow">
               <span className="freqLabel">DJ breaks</span>
               <div className="freqOptions">
@@ -376,6 +439,22 @@ function App() {
                     onClick={() => updateBreakEvery(value)}
                   >
                     {value === 1 ? 'Every song' : `Every ${value}`}
+                  </button>
+                ))}
+              </div>
+              <span className="freqLabel sleepLabel">
+                <Moon size={12} aria-hidden="true" /> Sleep timer
+                {sleepUntil ? ` — ${Math.max(1, Math.round(sleepLeft / 60000))} min left` : ''}
+              </span>
+              <div className="freqOptions">
+                {[null, 15, 30, 60].map((minutes) => (
+                  <button
+                    key={String(minutes)}
+                    type="button"
+                    className={sleepChoice === minutes ? 'freqChip active' : 'freqChip'}
+                    onClick={() => toggleSleep(minutes)}
+                  >
+                    {minutes === null ? 'Off' : `${minutes} min`}
                   </button>
                 ))}
               </div>

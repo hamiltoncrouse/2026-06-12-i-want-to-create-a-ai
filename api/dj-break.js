@@ -1,4 +1,4 @@
-const breakKinds = ['intro', 'songTalk', 'newsWeather', 'commercial', 'bumper', 'caller']
+const breakKinds = ['intro', 'songTalk', 'newsWeather', 'commercial', 'bumper', 'caller', 'legalId', 'request']
 const speakers = ['dj', 'caller', 'reporter', 'imaging']
 
 const kindNotes = {
@@ -14,6 +14,10 @@ const kindNotes = {
     'A produced station imaging sweeper, 8 to 20 words maximum: the station identity, the DJ name or show vibe, straight into the next song. One segment, speaker "imaging". Punchy, no filler.',
   caller:
     'A listener call-in. Structure segments: a short "dj" segment answering the phones, then the "caller" (a plausible first name from a real neighborhood or suburb of the station city) speaking for themselves — requesting the next track or telling a one-line story about it, sounding like a real person on a cell phone — then a short "dj" segment reacting and sending it to the song. Structure: dj, caller, dj.',
+  legalId:
+    'A top-of-the-hour legal station identification like real American radio: the station callsign or name, the city, the local time from localTime, and the DJ name. Twelve to twenty-five words. One segment, speaker "dj".',
+  request:
+    'A real listener wrote to the request line; requestText holds their exact message. Read or paraphrase it warmly on air, give the shoutout or dedication by name, and tie it to nextTrack — if the message asked for a song, present nextTrack as that request granted. One or two segments, all speaker "dj". Personal, specific, never mocking.',
 }
 
 const reporterRoles = [
@@ -57,7 +61,35 @@ function fallbackBreak(body) {
       tease,
       source: 'fallback',
       script,
+      showNote: '',
       segments: [{ speaker: 'imaging', text: script }],
+    }
+  }
+
+  if (kind === 'legalId') {
+    const time = stationLocalTime(context.timezone)
+    const script = `${stationName}, ${city}. It's ${time}. I'm ${name}.`
+    return {
+      kind,
+      title: 'Station ID',
+      tease,
+      source: 'fallback',
+      script,
+      showNote: '',
+      segments: [{ speaker: 'dj', text: script }],
+    }
+  }
+
+  if (kind === 'request') {
+    const script = `Got your message on the ${stationName} request line${body.requestText ? ` — "${body.requestText}"` : ''}. You got it. ${next.title ? `Here comes ${next.title}${next.artist ? ` by ${next.artist}` : ''}, going out to you.` : 'This one is going out to you.'}`
+    return {
+      kind,
+      title: 'Request line',
+      tease,
+      source: 'fallback',
+      script,
+      showNote: '',
+      segments: [{ speaker: 'dj', text: script }],
     }
   }
 
@@ -68,6 +100,7 @@ function fallbackBreak(body) {
       title: 'Caller request',
       tease,
       source: 'fallback',
+      showNote: '',
       script: `Phones are lit at ${stationName}. ${callerLine} You got it — this one is going out to you.`,
       segments: [
         { speaker: 'dj', text: `Phones are lit at ${stationName}. Go ahead, you are on the air.` },
@@ -84,6 +117,7 @@ function fallbackBreak(body) {
       title: 'News and weather',
       tease,
       source: 'fallback',
+      showNote: '',
       script: `Time for a quick local check-in. ${reporterText} Thanks Robin — back to the music.`,
       segments: [
         { speaker: 'dj', text: 'Time for a quick local check-in.' },
@@ -120,6 +154,7 @@ function fallbackBreak(body) {
     title: kind === 'commercial' ? 'Commercial break' : 'DJ break',
     tease,
     source: 'fallback',
+    showNote: '',
     script,
     segments: [{ speaker: 'dj', text: script }],
   }
@@ -164,9 +199,12 @@ export default async function handler(req, res) {
   const lengthRule =
     kind === 'bumper'
       ? 'Maximum 20 words.'
-      : kind === 'commercial'
-        ? 'Keep the whole break under 80 words.'
-        : 'Keep the whole break under 110 words.'
+      : kind === 'legalId'
+        ? 'Maximum 25 words.'
+        : kind === 'commercial'
+          ? 'Keep the whole break under 80 words.'
+          : 'Keep the whole break under 110 words.'
+  const useAngle = kind !== 'bumper' && kind !== 'legalId' && kind !== 'request'
 
   try {
     const response = await fetch('https://api.openai.com/v1/responses', {
@@ -188,9 +226,14 @@ export default async function handler(req, res) {
           'Return the break as ordered segments, each with a speaker: "dj" for the host, "caller" for a listener on the phone, "reporter" for a station colleague, "imaging" for the produced station voice.',
           `This break is a "${kind}" break. ${kindNotes[kind]}`,
           kind === 'newsWeather' ? `For this break the reporter segment is ${reporterRole}.` : '',
-          kind === 'bumper' ? '' : `Angle for this break: ${angle}.`,
+          useAngle ? `Angle for this break: ${angle}.` : '',
           'recentScripts contains what went on air in the last few breaks: never reuse their opening words, jokes, names, or facts, and vary sentence rhythm from break to break.',
+          'showNotes is the DJ\'s memory of this show so far: honor any promises in it, pay off teases, keep running bits and sponsor lore consistent, and never contradict it.',
+          'Return in showNote one short line worth remembering from this break — a promise to listeners, a running bit, a sponsor mention — or an empty string if nothing carries forward.',
+          'trackIntel, when present, contains verified facts about nextTrack (canonical artist, release year, a short artist bio). These are the ONLY artist or song facts you may state.',
+          'When trackIntel is null, keep music talk impressionistic: mood, feel, memories — no factual claims about the artist or song.',
           'Do not invent chart positions, dates, deaths, awards, or quotes unless the input makes them clear.',
+          'Match the show energy to the local time of day in localTime: bright at morning drive, easy midday, looser after dark.',
           'Say numbers and temperatures in spoken form. No markdown. No stage directions. No emoji.',
           'The script field must be the segments joined in order.',
           lengthRule,
@@ -204,6 +247,9 @@ export default async function handler(req, res) {
           previousTrack: body.previousTrack || null,
           nextTrack: body.nextTrack,
           queue: body.queue,
+          trackIntel: body.trackIntel || null,
+          requestText: body.requestText || null,
+          showNotes: body.showNotes || [],
           recentScripts: body.recentScripts || (body.recentScript ? [body.recentScript] : []),
           localTime: stationLocalTime(body.context?.timezone),
         }),
@@ -215,12 +261,13 @@ export default async function handler(req, res) {
             schema: {
               type: 'object',
               additionalProperties: false,
-              required: ['kind', 'title', 'script', 'tease', 'segments'],
+              required: ['kind', 'title', 'script', 'tease', 'showNote', 'segments'],
               properties: {
                 kind: { type: 'string', enum: breakKinds },
                 title: { type: 'string' },
                 script: { type: 'string' },
                 tease: { type: 'string' },
+                showNote: { type: 'string' },
                 segments: {
                   type: 'array',
                   items: {

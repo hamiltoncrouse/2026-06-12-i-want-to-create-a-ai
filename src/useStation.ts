@@ -8,6 +8,7 @@ import type {
   DjProfile,
   StationContext,
   Track,
+  TrackIntel,
 } from './types'
 
 const silentAudioUrl =
@@ -29,6 +30,12 @@ const BREAK_GRACE_MS = 900
 export type StationMode = 'idle' | 'loading' | 'break' | 'song' | 'paused'
 
 export type BreakEntry = BreakPlan & { id: number; at: string }
+
+export type ListenerRequest = {
+  id: number
+  text: string
+  targetIndex: number | null
+}
 
 type VoiceFx = {
   dry: GainNode
@@ -54,6 +61,7 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
   const [progress, setProgress] = useState({ time: 0, duration: 0 })
   const [volume, setVolumeState] = useState(1)
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null)
+  const [pendingRequest, setPendingRequest] = useState<string | null>(null)
 
   const songRef = useRef<HTMLAudioElement | null>(null)
   const breakRef = useRef<HTMLAudioElement | null>(null)
@@ -74,6 +82,10 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
   const duckRef = useRef(1)
   const rampRef = useRef<number | null>(null)
   const recentScriptsRef = useRef<string[]>([])
+  const showNotesRef = useRef<string[]>([])
+  const intelRef = useRef<Map<string, TrackIntel | null>>(new Map())
+  const requestRef = useRef<ListenerRequest | null>(null)
+  const lastIdHourRef = useRef(new Date().getHours())
   const preloadRef = useRef<Map<string, Promise<BreakPlan>>>(new Map())
   const standbyLinerRef = useRef<Map<string, Promise<BreakPlan | null>>>(new Map())
   const goodTracksRef = useRef<Set<string>>(new Set())
@@ -181,10 +193,15 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
         node.fftSize = 256
         node.smoothingTimeConstant = 0.8
 
+        // All speaker paths feed a shared voice bus, which runs through a
+        // broadcast mic chain (compression, presence lift, makeup gain) so
+        // every voice sounds processed like FM radio.
+        const voiceBus = ctx.createGain()
+
         const dry = ctx.createGain()
         dry.gain.value = 1
         source.connect(dry)
-        dry.connect(node)
+        dry.connect(voiceBus)
 
         const phoneHp = ctx.createBiquadFilter()
         phoneHp.type = 'highpass'
@@ -203,7 +220,7 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
         phoneHp.connect(phoneLp)
         phoneLp.connect(phonePeak)
         phonePeak.connect(phone)
-        phone.connect(node)
+        phone.connect(voiceBus)
 
         const echoDelay = ctx.createDelay(1)
         echoDelay.delayTime.value = 0.17
@@ -215,8 +232,25 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
         echoDelay.connect(echoFeedback)
         echoFeedback.connect(echoDelay)
         echoDelay.connect(echo)
-        echo.connect(node)
+        echo.connect(voiceBus)
 
+        const compressor = ctx.createDynamicsCompressor()
+        compressor.threshold.value = -20
+        compressor.knee.value = 14
+        compressor.ratio.value = 3.2
+        compressor.attack.value = 0.004
+        compressor.release.value = 0.24
+        const presence = ctx.createBiquadFilter()
+        presence.type = 'peaking'
+        presence.frequency.value = 3200
+        presence.gain.value = 2.5
+        presence.Q.value = 0.9
+        const makeup = ctx.createGain()
+        makeup.gain.value = 1.15
+        voiceBus.connect(compressor)
+        compressor.connect(presence)
+        presence.connect(makeup)
+        makeup.connect(node)
         node.connect(ctx.destination)
         audioCtxRef.current = ctx
         analyserNodeRef.current = node
@@ -420,6 +454,27 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
     return promise
   }, [])
 
+  // Verified artist/song facts so the DJ talks about real music history.
+  const fetchTrackIntel = useCallback(async (track: Track | undefined) => {
+    if (!track || track.source === 'demo' || /^unknown artist$/i.test(track.artist)) return null
+    const cached = intelRef.current.get(track.id)
+    if (cached !== undefined) return cached
+    try {
+      const params = new URLSearchParams({ artist: track.artist, title: track.title })
+      const response = await fetch(`/api/track-intel?${params}`)
+      const data = (await response.json()) as { intel: TrackIntel | null }
+      const intel = response.ok ? data.intel : null
+      intelRef.current.set(track.id, intel)
+      if (intelRef.current.size > 200) {
+        const oldest = intelRef.current.keys().next().value
+        if (oldest) intelRef.current.delete(oldest)
+      }
+      return intel
+    } catch {
+      return null
+    }
+  }, [])
+
   const probeTrack = useCallback((track: Track) => {
     if (goodTracksRef.current.has(track.id)) return Promise.resolve(true)
     if (badTracksRef.current.has(track.id)) return Promise.resolve(false)
@@ -503,6 +558,8 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
         commercial: `This hour of ${stationName} comes courtesy of Needle Drop Coffee, keeping the control room awake since forever. Back to the music with ${nextTitle}.`,
         bumper: `${activeDj.callsign || 'Airbreak'}. ${activeDj.name}. ${city}. More music right now.`,
         caller: `Just had a listener on the line asking for ${nextTitle} - you got it. This one is for you.`,
+        legalId: `${stationName}, ${city}. It's ${new Date().toLocaleTimeString([], { hour: 'numeric' })}. I'm ${activeDj.name}.`,
+        request: `Got your message on the ${stationName} request line. You got it — here comes ${nextTitle}, going out to you.`,
       }
       const script = scripts[kind] || scripts.songTalk
       return {
@@ -511,6 +568,7 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
         source: 'fallback',
         tease: `Next: ${nextTitle}`,
         script,
+        showNote: '',
         segments: [{ speaker: kind === 'bumper' ? 'imaging' : 'dj', text: script }],
       }
     },
@@ -529,12 +587,14 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
       nextTrack?.id || 'empty',
       queuedAfter?.id || 'no-after',
       djRef.current.id,
+      kind === 'request' ? `req-${requestRef.current?.id ?? 'none'}` : '',
     ].join(':')
     const existing = preloadRef.current.get(key)
     if (existing) return existing
 
     const promise = (async (): Promise<BreakPlan> => {
       setBufferStatus('Writing the next break')
+      const trackIntel = await fetchTrackIntel(nextTrack)
       const breakResponse = await fetch('/api/dj-break', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -545,6 +605,9 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
           previousTrack,
           nextTrack,
           queue: activeTracks.slice(index, index + 6),
+          trackIntel,
+          requestText: kind === 'request' ? requestRef.current?.text || null : null,
+          showNotes: showNotesRef.current,
           recentScripts: recentScriptsRef.current,
         }),
       })
@@ -600,7 +663,15 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
       if (oldest) preloadRef.current.delete(oldest)
     }
     return promise
-  }, [makeBackupBreak])
+  }, [fetchTrackIntel, makeBackupBreak])
+
+  // Requests and the top-of-hour ID take priority over the regular rotation.
+  const resolveBreakKind = useCallback((): BreakKind => {
+    if (breakSeqRef.current === 0) return selectBreakKind(0)
+    if (requestRef.current) return 'request'
+    if (new Date().getHours() !== lastIdHourRef.current) return 'legalId'
+    return selectBreakKind(breakSeqRef.current)
+  }, [])
 
   const requestBreakForAir = useCallback(
     async (index: number, kind: BreakKind, previousIndex?: number) => {
@@ -655,11 +726,27 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
       nextIndexPromiseRef.current = promise
 
       void (async () => {
-        const nextIndex = await promise
+        let nextIndex = await promise
+
+        // A pending request or a due station ID forces a break at the very
+        // next transition, regardless of the regular rotation.
+        const request = requestRef.current
+        if (request) {
+          if (request.targetIndex != null) {
+            nextIndex = await findPlayableIndex(request.targetIndex)
+          }
+          requestBreak(nextIndex, 'request', index)
+          return
+        }
+        if (new Date().getHours() !== lastIdHourRef.current) {
+          requestBreak(nextIndex, 'legalId', index)
+          return
+        }
+
         const songsUntilBreak = Math.max(0, breakEveryRef.current - songsSinceBreakRef.current)
         const breakKind = selectBreakKind(breakSeqRef.current)
         if (songsUntilBreak === 0) {
-          requestBreak(nextIndex, selectBreakKind(breakSeqRef.current), index)
+          requestBreak(nextIndex, breakKind, index)
           return
         }
 
@@ -756,7 +843,7 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
       const activeTracks = tracksRef.current
       if (!activeTracks.length || stopRef.current) return
 
-      const breakKind = selectBreakKind(breakSeqRef.current)
+      const breakKind = resolveBreakKind()
       phaseRef.current = 'loading'
       setMode('loading')
       setStatus('Cueing the mic')
@@ -768,8 +855,19 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
       setStatus('On the mic')
       setNowScript(breakPlan.script)
       recentScriptsRef.current = [...recentScriptsRef.current, breakPlan.script].slice(-3)
-      breakSeqRef.current += 1
-      setBreakSeq(breakSeqRef.current)
+      if (breakPlan.showNote?.trim()) {
+        showNotesRef.current = [...showNotesRef.current, breakPlan.showNote.trim()].slice(-6)
+      }
+      if (breakKind === 'legalId') {
+        // Station IDs ride on top of the clock, not the rotation.
+        lastIdHourRef.current = new Date().getHours()
+      } else if (breakKind === 'request') {
+        requestRef.current = null
+        setPendingRequest(null)
+      } else {
+        breakSeqRef.current += 1
+        setBreakSeq(breakSeqRef.current)
+      }
       setBreakLog((prev) =>
         [
           {
@@ -817,7 +915,7 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
       setStatus('On air')
       rampDuck(1, SWELL_MS)
     },
-    [beginSong, getSongAudio, playPlanAudio, prepareNext, rampDuck, requestBreakForAir],
+    [beginSong, getSongAudio, playPlanAudio, prepareNext, rampDuck, requestBreakForAir, resolveBreakKind],
   )
 
   useEffect(() => {
@@ -832,11 +930,18 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
       setPlayCount(nextCount)
       const pending = nextIndexPromiseRef.current
       nextIndexPromiseRef.current = null
-      const nextIndex = pending
+      let nextIndex = pending
         ? await pending
         : await findPlayableIndex((fromIndex + 1) % Math.max(1, tracksRef.current.length))
       if (stopRef.current) return
-      if (songsSinceBreakRef.current >= breakEveryRef.current) {
+      const request = requestRef.current
+      if (request?.targetIndex != null) {
+        // Jump the rotation to the requested song.
+        nextIndex = await findPlayableIndex(request.targetIndex)
+        if (stopRef.current) return
+      }
+      const idDue = new Date().getHours() !== lastIdHourRef.current
+      if (request || idDue || songsSinceBreakRef.current >= breakEveryRef.current) {
         chainRef.current(nextIndex, nextCount, fromIndex)
       } else {
         songsSinceBreakRef.current += 1
@@ -909,6 +1014,58 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
     return () => document.removeEventListener('visibilitychange', onVisibilityChange)
   }, [])
 
+  // Listener request line: match the message against the library, queue the
+  // dedication break, and (when a song matches) jump the rotation to it.
+  const matchTrack = useCallback((text: string): number | null => {
+    const words = text
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter((word) => word.length > 2)
+    if (!words.length) return null
+    let best = -1
+    let bestScore = 0
+    tracksRef.current.forEach((track, index) => {
+      if (badTracksRef.current.has(track.id)) return
+      const haystack = `${track.title} ${track.artist}`.toLowerCase()
+      let score = 0
+      for (const word of words) {
+        if (haystack.includes(word)) score += word.length > 4 ? 2 : 1
+      }
+      if (score > bestScore) {
+        bestScore = score
+        best = index
+      }
+    })
+    return bestScore >= 3 ? best : null
+  }, [])
+
+  const submitRequest = useCallback(
+    (text: string) => {
+      const trimmed = text.trim().slice(0, 280)
+      if (!trimmed) return
+      const targetIndex = matchTrack(trimmed)
+      requestRef.current = { id: Date.now(), text: trimmed, targetIndex }
+      setPendingRequest(trimmed)
+      setBufferStatus(
+        targetIndex != null ? 'Request matched — cueing your song' : 'Request on deck for the next break',
+      )
+      // Write and voice the dedication right away so it airs at the very
+      // next transition.
+      if (phaseRef.current === 'song' || phaseRef.current === 'break') {
+        void (async () => {
+          const length = Math.max(1, tracksRef.current.length)
+          const airIndex =
+            targetIndex != null
+              ? await findPlayableIndex(targetIndex)
+              : await findPlayableIndex((indexRef.current + 1) % length)
+          requestBreak(airIndex, 'request', indexRef.current)
+        })()
+      }
+    },
+    [findPlayableIndex, matchTrack, requestBreak],
+  )
+
   // Keep a short, real-voice station liner ready as the emergency on-air bridge.
   useEffect(() => {
     if (mode !== 'idle') return
@@ -952,6 +1109,8 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
     }
     stopRef.current = false
     setBufferStatus('Writing the opening break')
+    lastIdHourRef.current = new Date().getHours()
+    showNotesRef.current = []
     countRef.current = 0
     setPlayCount(0)
     breakSeqRef.current = 0
@@ -1067,6 +1226,10 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
     preloadRef.current.clear()
     goodTracksRef.current.clear()
     badTracksRef.current.clear()
+    intelRef.current.clear()
+    showNotesRef.current = []
+    requestRef.current = null
+    setPendingRequest(null)
     nextIndexPromiseRef.current = null
     breakSeqRef.current = 0
     setBreakSeq(0)
@@ -1147,5 +1310,7 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
     skip,
     playTrack,
     seek,
+    submitRequest,
+    pendingRequest,
   }
 }

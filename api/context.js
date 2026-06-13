@@ -194,6 +194,12 @@ export default async function handler(req, res) {
   const detected = !requested || requested === 'auto' ? detectListenerCity(req) : null
   const city = detected?.city || (requested && requested !== 'auto' ? requested : 'New York, NY')
 
+  // Explicit cities are safe to share at the edge; auto-detected ones are
+  // per-listener and must never be cached across users.
+  if (requested && requested !== 'auto') {
+    res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=900')
+  }
+
   try {
     const coordinates = await getCoordinates(city)
     // Use the geocoder's canonical "City, State" so news feeds disambiguate

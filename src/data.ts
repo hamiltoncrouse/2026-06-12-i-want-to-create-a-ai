@@ -159,6 +159,8 @@ export const breakKindLabels: Record<BreakKind, string> = {
   commercial: 'Sponsor spot',
   bumper: 'Station bumper',
   caller: 'Caller request',
+  legalId: 'Station ID',
+  request: 'Request line',
 }
 
 export function formatTrackName(name: string) {
