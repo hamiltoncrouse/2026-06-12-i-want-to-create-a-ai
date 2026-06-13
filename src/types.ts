@@ -97,8 +97,9 @@ export type BreakSpeaker = 'dj' | 'caller' | 'reporter' | 'imaging' | 'spot'
 
 // A pre-produced advertisement attached to a DJ: the host's lines are voiced
 // at runtime; the "spot" parts play fixed audio assets (phone ring, a guest's
-// recording) bundled with the app.
-export type SpotPart = { speaker: 'dj'; text: string } | { speaker: 'spot'; audioUrl: string }
+// recording) bundled with the app. Host parts carry a pool of line variants so
+// the framing varies from airing to airing.
+export type SpotPart = { speaker: 'dj'; texts: string[] } | { speaker: 'spot'; audioUrl: string }
 
 export type ProducedSpot = { id: string; title: string; parts: SpotPart[] }
 

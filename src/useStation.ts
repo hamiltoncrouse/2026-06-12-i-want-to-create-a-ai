@@ -968,7 +968,7 @@ export function useStation(
         segments = spot.parts.map((part) =>
           part.speaker === 'spot'
             ? { speaker: 'spot', text: '', audioUrl: part.audioUrl }
-            : { speaker: 'dj', text: part.text },
+            : { speaker: 'dj', text: part.texts[Math.floor(Math.random() * part.texts.length)] },
         )
         plan = {
           kind: 'commercial',
