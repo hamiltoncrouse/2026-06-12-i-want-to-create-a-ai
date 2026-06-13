@@ -622,29 +622,54 @@ export function useStation(
   const findPlayableIndex = useCallback(
     async (from: number, excluded = new Set<number>()) => {
       const activeTracks = tracksRef.current
-      const scored: { index: number; score: number }[] = []
-      const blocked: number[] = []
+      if (!hasSteering(steeringRef.current)) {
+        for (let step = 0; step < activeTracks.length; step++) {
+          const index = (from + step) % activeTracks.length
+          if (excluded.has(index)) continue
+          const track = activeTracks[index]
+          if (!track) break
+          if (await probeTrack(track)) return index
+        }
+        return from
+      }
+
+      const candidates: { index: number; score: number }[] = []
+      const blocked: { index: number; score: number }[] = []
       for (let step = 0; step < activeTracks.length; step++) {
         const index = (from + step) % activeTracks.length
         if (excluded.has(index)) continue
         const track = activeTracks[index]
         if (!track) break
-        if (!(await probeTrack(track))) continue
-        if (!hasSteering(steeringRef.current)) return index
         const score = scoreTrackForSteering(
           track,
           steeringRef.current,
           recentTrackIdsRef.current,
           recentArtistsRef.current,
         )
-        if (score <= -900) blocked.push(index)
-        else scored.push({ index, score })
+        if (score <= -900) blocked.push({ index, score })
+        else candidates.push({ index, score })
       }
-      if (scored.length) {
-        scored.sort((a, b) => b.score - a.score)
-        return scored[0].index
+
+      candidates.sort((a, b) => b.score - a.score)
+      for (const candidate of candidates.slice(0, 24)) {
+        const track = activeTracks[candidate.index]
+        if (track && (await probeTrack(track))) return candidate.index
       }
-      if (blocked.length) return blocked[0]
+
+      // If all preferred candidates are unavailable, keep the station moving
+      // with the normal rotation before relaxing explicit avoid rules.
+      for (let step = 0; step < activeTracks.length; step++) {
+        const index = (from + step) % activeTracks.length
+        if (excluded.has(index) || blocked.some((candidate) => candidate.index === index)) continue
+        const track = activeTracks[index]
+        if (track && (await probeTrack(track))) return index
+      }
+
+      blocked.sort((a, b) => b.score - a.score)
+      for (const candidate of blocked.slice(0, 8)) {
+        const track = activeTracks[candidate.index]
+        if (track && (await probeTrack(track))) return candidate.index
+      }
       return from
     },
     [probeTrack],
@@ -806,6 +831,29 @@ export function useStation(
     }
     return promise
   }, [makeBackupBreak, selectUsageTip])
+
+  useEffect(() => {
+    if (!tracksRef.current.length) return
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const fromIndex = indexRef.current
+        const nextIndex = await findPlayableIndex(
+          (fromIndex + 1) % Math.max(1, tracksRef.current.length),
+        )
+        if (cancelled) return
+        setPlannedNextIndex(nextIndex)
+        nextIndexPromiseRef.current = Promise.resolve(nextIndex)
+        if (phaseRef.current === 'song') {
+          requestBreak(nextIndex, selectBreakKind(breakSeqRef.current), fromIndex)
+        }
+      })()
+    }, 250)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [findPlayableIndex, requestBreak, steering])
 
   const requestBreakForAir = useCallback(
     async (index: number, kind: BreakKind, previousIndex?: number) => {

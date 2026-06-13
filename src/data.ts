@@ -303,8 +303,7 @@ export function hasSteering(steering: SessionSteering) {
       steering.avoidArtists.length ||
       steering.tempos.length ||
       steering.dayparts.length ||
-      steering.energyRange ||
-      steering.note,
+      steering.energyRange,
   )
 }
 
