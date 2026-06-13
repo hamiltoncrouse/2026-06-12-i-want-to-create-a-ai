@@ -45,6 +45,12 @@ export type StationContext = {
   generatedAt: string
 }
 
+export type ListenerRequest = {
+  id: string
+  text: string
+  at: string
+}
+
 export type BreakKind =
   | 'intro'
   | 'songTalk'

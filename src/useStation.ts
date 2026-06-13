@@ -6,6 +6,7 @@ import type {
   BreakSegment,
   BreakSpeaker,
   DjProfile,
+  ListenerRequest,
   StationContext,
   Track,
 } from './types'
@@ -45,7 +46,13 @@ function artworkDataUrl(color: string) {
   return `data:image/svg+xml,${encodeURIComponent(svg)}`
 }
 
-export function useStation(dj: DjProfile, context: StationContext, breakEvery: number) {
+export function useStation(
+  dj: DjProfile,
+  context: StationContext,
+  breakEvery: number,
+  listenerRequests: ListenerRequest[] = [],
+  onRequestsAired?: (ids: string[]) => void,
+) {
   const [tracks, setTracks] = useState<Track[]>(demoTracks)
   const [currentIndex, setCurrentIndex] = useState(0)
   const [playCount, setPlayCount] = useState(0)
@@ -69,6 +76,8 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
   const tracksRef = useRef(tracks)
   const djRef = useRef(dj)
   const contextRef = useRef(context)
+  const listenerRequestsRef = useRef(listenerRequests)
+  const onRequestsAiredRef = useRef(onRequestsAired)
   const indexRef = useRef(0)
   const countRef = useRef(0)
   const breakSeqRef = useRef(0)
@@ -98,6 +107,14 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
   useEffect(() => {
     contextRef.current = context
   }, [context])
+
+  useEffect(() => {
+    listenerRequestsRef.current = listenerRequests
+  }, [listenerRequests])
+
+  useEffect(() => {
+    onRequestsAiredRef.current = onRequestsAired
+  }, [onRequestsAired])
 
   useEffect(() => {
     breakEveryRef.current = Math.max(1, breakEvery)
@@ -597,12 +614,15 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
     const nextTrack = activeTracks[index]
     const previousTrack = typeof previousIndex === 'number' ? activeTracks[previousIndex] : undefined
     const queuedAfter = activeTracks[(index + 1) % activeTracks.length]
+    const queuedRequests = listenerRequestsRef.current.slice(0, 3)
+    const requestKey = queuedRequests.map((request) => request.id).join(',') || 'no-requests'
     const key = [
       index,
       kind,
       previousTrack?.id || 'no-prev',
       nextTrack?.id || 'empty',
       queuedAfter?.id || 'no-after',
+      requestKey,
       djRef.current.id,
     ].join(':')
     const existing = preloadRef.current.get(key)
@@ -620,6 +640,7 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
           previousTrack,
           nextTrack,
           queue: activeTracks.slice(index, index + 6),
+          listenerRequests: queuedRequests,
           recentScripts: recentScriptsRef.current,
         }),
       })
@@ -837,6 +858,10 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
       setStatus('Cueing the mic')
       const breakPlan = await requestBreakForAir(index, breakKind, previousIndex)
       if (stopRef.current) return
+      if (breakPlan.title !== 'Standby liner') {
+        const airedRequestIds = listenerRequestsRef.current.slice(0, 3).map((request) => request.id)
+        if (airedRequestIds.length) onRequestsAiredRef.current?.(airedRequestIds)
+      }
 
       phaseRef.current = 'break'
       setMode('break')
@@ -924,6 +949,21 @@ export function useStation(dj: DjProfile, context: StationContext, breakEvery: n
   useEffect(() => {
     advanceRef.current = advance
   }, [advance])
+
+  useEffect(() => {
+    if (!listenerRequests.length || phaseRef.current !== 'song' || !tracksRef.current.length) return
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const fromIndex = indexRef.current
+        const nextIndex =
+          nextIndexPromiseRef.current ||
+          findPlayableIndex((fromIndex + 1) % Math.max(1, tracksRef.current.length))
+        const resolvedIndex = await nextIndex
+        requestBreak(resolvedIndex, selectBreakKind(breakSeqRef.current), fromIndex)
+      })()
+    }, 300)
+    return () => window.clearTimeout(timer)
+  }, [findPlayableIndex, listenerRequests, requestBreak])
 
   // Self-healing watchdog: mobile browsers reject play() or stall streams
   // after interruptions (screen lock, phone calls, flaky cell data). Retry

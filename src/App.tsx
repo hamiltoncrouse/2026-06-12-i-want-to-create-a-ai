@@ -1,5 +1,6 @@
 import {
   Cloud,
+  Headphones,
   ListMusic,
   Loader2,
   MapPin,
@@ -11,6 +12,7 @@ import {
   Plus,
   Radio,
   Save,
+  Send,
   SkipForward,
   Trash2,
   Upload,
@@ -31,7 +33,7 @@ import {
   splitArtistTitle,
   voiceOptions,
 } from './data'
-import type { DjProfile, StationContext, Track, VoiceName } from './types'
+import type { DjProfile, ListenerRequest, StationContext, Track, VoiceName } from './types'
 import { useStation } from './useStation'
 import { Visualizer } from './Visualizer'
 
@@ -91,11 +93,27 @@ function App() {
     const saved = Number(localStorage.getItem('ai-dj-break-every'))
     return [1, 2, 3, 5].includes(saved) ? saved : 1
   })
+  const [requestDraft, setRequestDraft] = useState('')
+  const [listenerRequests, setListenerRequests] = useState<ListenerRequest[]>([])
+  const [previewingVoice, setPreviewingVoice] = useState(false)
+  const [voicePreviewStatus, setVoicePreviewStatus] = useState('')
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null)
+  const previewAudioUrlRef = useRef<string | null>(null)
 
   const djs = [...presetDjs, ...customDjs]
   const selectedDj = djs.find((dj) => dj.id === selectedDjId) || djs[0]
 
-  const station = useStation(selectedDj, context, breakEvery)
+  const handleRequestsAired = useCallback((ids: string[]) => {
+    setListenerRequests((requests) => requests.filter((request) => !ids.includes(request.id)))
+  }, [])
+
+  const station = useStation(
+    selectedDj,
+    context,
+    breakEvery,
+    listenerRequests,
+    handleRequestsAired,
+  )
   const {
     tracks,
     setLibrary,
@@ -239,6 +257,66 @@ function App() {
     [customDjs, selectedDjId],
   )
 
+  const previewDraftVoice = useCallback(async () => {
+    if (previewingVoice) return
+    setPreviewingVoice(true)
+    setVoicePreviewStatus('Preparing preview')
+    try {
+      previewAudioRef.current?.pause()
+      if (previewAudioUrlRef.current) URL.revokeObjectURL(previewAudioUrlRef.current)
+      previewAudioUrlRef.current = null
+      const name = draftDj.name.trim() || 'your DJ'
+      const station = draftDj.callsign?.trim() || draftDj.stationName?.trim() || 'Airbreak'
+      const response = await fetch('/api/voice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: `You're listening to ${name} on ${station}. Keep listening.`,
+          voice: draftDj.voice,
+          speaker: 'dj',
+          style: draftDj.style,
+        }),
+      })
+      if (!response.ok || !response.headers.get('content-type')?.includes('audio')) {
+        setVoicePreviewStatus('Voice preview unavailable')
+        return
+      }
+      const blob = await response.blob()
+      const audioUrl = URL.createObjectURL(blob)
+      previewAudioUrlRef.current = audioUrl
+      const audio = new Audio(audioUrl)
+      previewAudioRef.current = audio
+      const releasePreviewUrl = () => {
+        if (previewAudioUrlRef.current === audioUrl) previewAudioUrlRef.current = null
+        URL.revokeObjectURL(audioUrl)
+      }
+      audio.onended = releasePreviewUrl
+      audio.onerror = releasePreviewUrl
+      await audio.play()
+      setVoicePreviewStatus('Playing preview')
+    } catch {
+      setVoicePreviewStatus('Voice preview failed')
+    } finally {
+      setPreviewingVoice(false)
+    }
+  }, [draftDj, previewingVoice])
+
+  const submitRequest = useCallback(() => {
+    const text = requestDraft.trim().replace(/\s+/g, ' ').slice(0, 220)
+    if (!text) return
+    const request: ListenerRequest = {
+      id: `request-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      text,
+      at: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+    }
+    setListenerRequests((requests) => [...requests, request].slice(-8))
+    setRequestDraft('')
+  }, [requestDraft])
+
+  const removeRequest = useCallback((id: string) => {
+    setListenerRequests((requests) => requests.filter((request) => request.id !== id))
+  }, [])
+
   const progressPct = progress.duration ? (progress.time / progress.duration) * 100 : 0
   const volumePct = volume * 100
 
@@ -354,6 +432,48 @@ function App() {
                 {nowScript ||
                   `${selectedDj.name} is standing by with ${selectedDj.format}. Hit play to go live.`}
               </p>
+            </div>
+
+            <div className="requestPanel">
+              <div className="requestHeader">
+                <span className="upNextLabel">Request line</span>
+                <span>{listenerRequests.length} queued</span>
+              </div>
+              <div className="requestRow">
+                <input
+                  value={requestDraft}
+                  onChange={(event) => setRequestDraft(event.target.value)}
+                  onKeyDown={(event) => event.key === 'Enter' && submitRequest()}
+                  placeholder="Ask for a song, dedication, or shout-out"
+                  aria-label="Request line message"
+                  maxLength={220}
+                />
+                <button
+                  className="iconButton"
+                  type="button"
+                  onClick={submitRequest}
+                  disabled={!requestDraft.trim()}
+                  aria-label="Send request"
+                >
+                  <Send size={18} />
+                </button>
+              </div>
+              {!!listenerRequests.length && (
+                <div className="requestQueue">
+                  {listenerRequests.slice(0, 3).map((request) => (
+                    <button
+                      className="requestChip"
+                      key={request.id}
+                      type="button"
+                      onClick={() => removeRequest(request.id)}
+                      title="Remove request"
+                    >
+                      <span>{request.text}</span>
+                      <small>{request.at}</small>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {nextTrack && nextTrack.id !== currentTrack?.id && (
@@ -494,6 +614,22 @@ function App() {
                     ))}
                   </select>
                 </label>
+                <div className="voicePreview wideField">
+                  <button
+                    className="secondaryButton"
+                    type="button"
+                    onClick={previewDraftVoice}
+                    disabled={previewingVoice}
+                  >
+                    {previewingVoice ? (
+                      <Loader2 className="spinIcon" size={18} />
+                    ) : (
+                      <Headphones size={18} />
+                    )}
+                    Preview voice
+                  </button>
+                  <span>{voicePreviewStatus || 'Hear the selected voice with this DJ identity.'}</span>
+                </div>
                 <label>
                   <span>Format</span>
                   <input

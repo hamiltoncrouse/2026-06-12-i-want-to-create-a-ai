@@ -496,6 +496,62 @@ input[type='range']:disabled::-webkit-slider-thumb {
   text-overflow: ellipsis;
 }
 
+.requestPanel {
+  display: grid;
+  gap: 10px;
+  padding: 13px 15px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
+}
+
+.requestHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.requestRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  gap: 8px;
+}
+
+.requestQueue {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.requestChip {
+  display: grid;
+  flex: 0 0 min(260px, 82%);
+  gap: 3px;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--ink);
+  text-align: left;
+}
+
+.requestChip span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.requestChip small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
 .freqRow {
   display: grid;
   gap: 10px;
@@ -716,6 +772,28 @@ input[type='range']:disabled::-webkit-slider-thumb {
 
 .wideField {
   grid-column: 1 / -1;
+}
+
+.voicePreview {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.7fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.voicePreview .secondaryButton {
+  margin-top: 0;
+}
+
+.voicePreview span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+@media (max-width: 420px) {
+  .voicePreview {
+    grid-template-columns: 1fr;
+  }
 }
 
 input,
