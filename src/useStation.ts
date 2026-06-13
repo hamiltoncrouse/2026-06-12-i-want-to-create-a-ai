@@ -121,6 +121,7 @@ export function useStation(
   const duckRef = useRef(1)
   const rampRef = useRef<number | null>(null)
   const recentScriptsRef = useRef<string[]>([])
+  const showNotesRef = useRef<string[]>([])
   const recentTrackIdsRef = useRef<string[]>([])
   const recentArtistsRef = useRef<string[]>([])
   const preloadRef = useRef<Map<string, Promise<BreakPlan>>>(new Map())
@@ -775,6 +776,7 @@ export function useStation(
           steering: steeringRef.current,
           usageTip,
           recentScripts: recentScriptsRef.current,
+          showNotes: showNotesRef.current,
         }),
       })
       const plan = (await breakResponse.json()) as BreakPlan
@@ -1041,6 +1043,9 @@ export function useStation(
       setStatus('On the mic')
       setNowScript(breakPlan.script)
       recentScriptsRef.current = [...recentScriptsRef.current, breakPlan.script].slice(-3)
+      if (breakPlan.showNote?.trim()) {
+        showNotesRef.current = [...showNotesRef.current, breakPlan.showNote.trim()].slice(-8)
+      }
       breakSeqRef.current += 1
       setBreakSeq(breakSeqRef.current)
       setBreakLog((prev) =>
@@ -1245,6 +1250,8 @@ export function useStation(
     breakSeqRef.current = 0
     setBreakSeq(0)
     songsSinceBreakRef.current = 0
+    recentScriptsRef.current = []
+    showNotesRef.current = []
     void (async () => {
       const startIndex = await findPlayableIndex(indexRef.current)
       if (stopRef.current) return

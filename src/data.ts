@@ -371,7 +371,11 @@ export function scoreTrackForSteering(
   if (recentTrackIds.includes(track.id)) score -= 80
   if (recentArtists.includes(artist)) score -= 18
   if (!allTerms.length && hasSteering(steering)) score -= 4
-  return score + Math.random() * 3
+  // Stable per-track jitter (not Math.random): keeps ordering varied between
+  // tracks while staying identical across the preload and air-time calls, so a
+  // break voiced during the song still matches what airs. Random jitter here
+  // made the two calls disagree and forced canned fallbacks.
+  return score + (seedHash(track.id) % 1000) / 1000 * 3
 }
 
 function seedHash(seed: string) {

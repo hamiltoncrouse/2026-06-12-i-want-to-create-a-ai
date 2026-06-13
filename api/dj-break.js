@@ -51,11 +51,14 @@ function fallbackBreak(body) {
   const stationName = dj.stationName || 'Airbreak'
   const callsign = dj.callsign || stationName
   const tease = next.title ? `Next: ${next.title}` : 'More music ahead'
+  const nextDescriptor = [next.year, Array.isArray(next.genre) ? next.genre[0] : '']
+    .filter(Boolean)
+    .join(' ')
   const nextFact =
     next.metadataConfidence !== 'low' && Array.isArray(next.facts) && next.facts[0]
       ? `Quick note: ${next.facts[0]}`
-      : next.djNotes
-        ? next.djNotes
+      : nextDescriptor
+        ? `A little ${nextDescriptor} for you.`
         : ''
   const steeringLine = steering.note ? 'Keeping the set right where you asked for it.' : ''
   const usageTipLine = usageTip?.text && kind === 'songTalk' ? String(usageTip.text).slice(0, 140) : ''
@@ -272,6 +275,8 @@ export default async function handler(req, res) {
           kind === 'newsWeather' ? `For this break the reporter segment is ${reporterRole}.` : '',
           kind === 'bumper' ? '' : `Angle for this break: ${angle}.`,
           'recentScripts contains what went on air in the last few breaks: never reuse their opening words, jokes, names, or facts, and vary sentence rhythm from break to break.',
+          'showNotes is the running memory of this show: promises made, teases set up, and bits already started. Honor and pay off anything in it, and never contradict it.',
+          'In showNote, return one short line worth remembering from THIS break (a promise, a tease, a running bit) or an empty string if nothing carries forward.',
           'Do not invent chart positions, dates, deaths, awards, or quotes unless the input makes them clear.',
           'Say numbers and temperatures in spoken form. No markdown. No stage directions. No emoji.',
           'The script field must be the segments joined in order.',
@@ -295,6 +300,7 @@ export default async function handler(req, res) {
               }))
             : [],
           recentScripts: body.recentScripts || (body.recentScript ? [body.recentScript] : []),
+          showNotes: stringArray(body.showNotes, 8, 160),
           localTime: stationLocalTime(body.context?.timezone),
         }),
         text: {
@@ -305,12 +311,13 @@ export default async function handler(req, res) {
             schema: {
               type: 'object',
               additionalProperties: false,
-              required: ['kind', 'title', 'script', 'tease', 'segments'],
+              required: ['kind', 'title', 'script', 'tease', 'showNote', 'segments'],
               properties: {
                 kind: { type: 'string', enum: breakKinds },
                 title: { type: 'string' },
                 script: { type: 'string' },
                 tease: { type: 'string' },
+                showNote: { type: 'string' },
                 segments: {
                   type: 'array',
                   items: {

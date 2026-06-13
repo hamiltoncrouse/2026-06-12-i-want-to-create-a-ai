@@ -106,6 +106,7 @@ export type BreakPlan = {
   title: string
   script: string
   tease: string
+  showNote?: string
   segments?: BreakSegment[]
   audioUrl?: string
   source: 'openai' | 'fallback'
