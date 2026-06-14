@@ -215,7 +215,7 @@ function App() {
 
   // Keep weather, news, and sports fresh during long listening sessions.
   useEffect(() => {
-    const interval = window.setInterval(() => setContextEpoch((epoch) => epoch + 1), 10 * 60 * 1000)
+    const interval = window.setInterval(() => setContextEpoch((epoch) => epoch + 1), 4 * 60 * 1000)
     return () => window.clearInterval(interval)
   }, [])
 
@@ -1012,6 +1012,26 @@ function App() {
               ).map((headline) => (
                 <p key={headline}>{headline}</p>
               ))}
+              {!!context.national?.length && (
+                <>
+                  <div className="infoTitle subTitle">
+                    <h3>National</h3>
+                  </div>
+                  {context.national.map((item) => (
+                    <p key={item}>{item}</p>
+                  ))}
+                </>
+              )}
+              {!!context.world?.length && (
+                <>
+                  <div className="infoTitle subTitle">
+                    <h3>World</h3>
+                  </div>
+                  {context.world.map((item) => (
+                    <p key={item}>{item}</p>
+                  ))}
+                </>
+              )}
               {!!context.sports?.length && (
                 <>
                   <div className="infoTitle subTitle">

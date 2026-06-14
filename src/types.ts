@@ -54,6 +54,8 @@ export type StationContext = {
   city: string
   weather: string
   headlines: string[]
+  national?: string[]
+  world?: string[]
   sports?: string[]
   facts?: string
   timezone?: string

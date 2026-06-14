@@ -140,6 +140,15 @@ function geoFeed(place, limit) {
   )
 }
 
+// Topic sections (NATION, WORLD, SPORTS, BUSINESS, ...) give fresh national and
+// international headlines that rotate often, so the news desk stops repeating.
+function topicFeed(topic, limit) {
+  return fetchRss(
+    `https://news.google.com/rss/headlines/section/topic/${topic}?hl=en-US&gl=US&ceid=US:en`,
+    limit,
+  )
+}
+
 async function getHeadlines(place) {
   const [name, state] = place.split(',').map((part) => part.trim())
   const [geo, search] = await Promise.all([
@@ -149,9 +158,13 @@ async function getHeadlines(place) {
   return [...new Set([...geo, ...search])].slice(0, 6)
 }
 
-function getSports(place) {
+async function getSports(place) {
   const [name, state] = place.split(',').map((part) => part.trim())
-  return searchFeed(`"${name}"${state ? ` ${state}` : ''} sports when:2d`, 3)
+  const [local, national] = await Promise.all([
+    searchFeed(`"${name}"${state ? ` ${state}` : ''} sports when:2d`, 3),
+    topicFeed('SPORTS', 3),
+  ])
+  return [...new Set([...local, ...national])].slice(0, 5)
 }
 
 async function getCityFacts(coordinates, city) {
@@ -199,9 +212,11 @@ export default async function handler(req, res) {
     // Use the geocoder's canonical "City, State" so news feeds disambiguate
     // places like Norwich, Connecticut from Norwich, England.
     const place = coordinates?.name || city
-    const [weather, headlines, sports, facts] = await Promise.all([
+    const [weather, headlines, national, world, sports, facts] = await Promise.all([
       getWeather(coordinates),
       getHeadlines(place),
+      topicFeed('NATION', 4),
+      topicFeed('WORLD', 4),
       getSports(place),
       getCityFacts(coordinates, city),
     ])
@@ -209,6 +224,8 @@ export default async function handler(req, res) {
       city,
       weather,
       headlines,
+      national,
+      world,
       sports,
       facts,
       timezone: detected?.timezone || coordinates?.timezone || '',
@@ -219,6 +236,8 @@ export default async function handler(req, res) {
       city,
       weather: 'Weather unavailable',
       headlines: [],
+      national: [],
+      world: [],
       sports: [],
       facts: '',
       timezone: detected?.timezone || '',

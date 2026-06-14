@@ -33,9 +33,11 @@ const kindNotes = {
 }
 
 const reporterRoles = [
-  'the news desk update',
+  'the local news desk update, using one or two items from context.headlines',
+  'the national news desk update, using one or two items from context.national',
+  'the world news desk update, using one or two items from context.world',
   'the Airbreak traffic-copter report from above the city, with plausible but generic road references unless the context names real roads',
-  'the sports desk update, using the sports items from the context',
+  'the sports desk update, using one or two items from context.sports',
 ]
 
 const angles = [
@@ -61,7 +63,17 @@ function fallbackBreak(body) {
   const kind = breakKinds.includes(body.kind) ? body.kind : 'songTalk'
 
   const weather = context.weather ? `Local weather: ${context.weather}.` : ''
-  const headline = context.headlines?.[0] ? `Also watching: ${context.headlines[0]}.` : ''
+  // Rotate the offline news desk across local, national, world, and sports so
+  // it does not repeat the same item every break.
+  const deskPool = [
+    context.headlines?.[0] && `Locally, ${context.headlines[0]}.`,
+    context.national?.[0] && `Nationally, ${context.national[0]}.`,
+    context.world?.[0] && `Around the world, ${context.world[0]}.`,
+    context.sports?.[0] && `In sports, ${context.sports[0]}.`,
+  ].filter(Boolean)
+  const headline = deskPool.length
+    ? deskPool[Math.floor(Date.now() / 60000) % deskPool.length]
+    : ''
   const name = dj.name || 'your AI DJ'
   const city = context.city || dj.city || 'the station'
   const stationName = dj.stationName || 'Airbreak'
@@ -278,7 +290,7 @@ export default async function handler(req, res) {
         instructions: [
           'You are the production writer for Airbreak, an AI radio station, writing live on-air copy.',
           'Write compact, spoken radio that sounds live, specific, and human.',
-          'The station broadcasts from context.city. context.weather, context.headlines, context.sports, context.facts, and localTime are the only sources of local truth — never invent local facts beyond them.',
+          'The station broadcasts from context.city. context.weather, context.headlines (local), context.national (US), context.world (international), context.sports, context.facts, and localTime are the only sources of real-world facts — never invent news, scores, or local facts beyond them.',
           'The DJ persona city is backstory only; the show is local to context.city.',
           'If dj.stationName or dj.callsign is present, use it as the station identity instead of the generic Airbreak name.',
           'previousTrack is the song that just ended before this break. nextTrack is the song that starts after this break. Never say nextTrack already played.',
