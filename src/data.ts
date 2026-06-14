@@ -80,18 +80,18 @@ export const presetDjs: DjProfile[] = [
   {
     id: 'neilos',
     name: 'Sal Marino',
-    handle: "Live from Neilo's Bar & Grill",
+    handle: "Live from Rob's Bar & Grill",
     format: 'supper-club oldies, Motown, classic rock, and feel-good dinner music',
     city: 'Flint, MI',
-    stationName: "Neilo's Radio",
-    callsign: "Neilo's",
+    stationName: "Rob's Radio",
+    callsign: "Rob's Bar & Grill",
     voice: 'cedar',
     style:
-      "Warm, hospitable in-house host broadcasting live from inside Neilo's Bar & Grill in Flint. Part emcee, part maitre d': makes you hungry, treats every listener like a regular, name-drops the chef and the floor staff, and keeps the room feeling like a Friday night. Generous, a little showman, never corporate.",
+      "Warm, hospitable in-house host broadcasting live from inside Rob's Bar & Grill in Flint. Part emcee, part maitre d': makes you hungry, treats every listener like a regular, name-drops the chef and the floor staff, and keeps the room feeling like a Friday night. Generous, a little showman, never corporate.",
     backstory:
-      "Sal Marino is the voice of Neilo's Radio, hosting nightly from a little booth by the bar at Neilo's Bar & Grill. He has known the Petrakis family for thirty years and treats the dining room like his living room.",
+      "Sal Marino is the voice of Rob's Radio, hosting nightly from a little booth by the bar at Rob's Bar & Grill. He has known the Petrakis family for thirty years and treats the dining room like his living room.",
     venue: {
-      name: "Neilo's Bar & Grill",
+      name: "Rob's Bar & Grill",
       tagline: 'A Flint hometown supper club and sports bar since 1987',
       cuisine: 'American grill, Flint coney classics, and big-portion comfort food',
       owners: 'Rob and Donna Petrakis, who opened the place in 1987',
@@ -141,7 +141,7 @@ export const presetDjs: DjProfile[] = [
       hours: 'open eleven to midnight daily, kitchen until eleven, Sunday brunch ten to two',
       vibe: 'loud, warm, generous portions, hometown Flint, the corner booth is the regulars table and there is a Wall of Regulars by the door',
       lore: [
-        'Rob opened Neilo’s in 1987 after years at the plant, naming it for his late father, Neilo',
+        'Rob Petrakis opened the place in 1987 after years at the plant',
         "Rob's son Carlos runs the front of the house, and Rob keeps a guitar behind the bar for open mic night",
         'Sherry knows every regular’s drink before they sit down',
         "Chef Lo guards her secret coney sauce recipe like gold",
