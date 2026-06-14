@@ -34,6 +34,9 @@ export const demoTracks: Track[] = [
   },
 ]
 
+// The DJ selected when the app first opens.
+export const defaultDjId = 'johnny-london'
+
 export const presetDjs: DjProfile[] = [
   {
     id: 'neilos',

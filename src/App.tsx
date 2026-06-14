@@ -42,6 +42,7 @@ import {
   hasSteering,
   initials,
   mergeSteering,
+  defaultDjId,
   presetDjs,
   selectBreakKind,
   shuffleTracks,
@@ -136,7 +137,7 @@ function App() {
     }
   })
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [selectedDjId, setSelectedDjId] = useState(presetDjs[0].id)
+  const [selectedDjId, setSelectedDjId] = useState(defaultDjId)
   const [context, setContext] = useState<StationContext>(emptyContext)
   const [contextEpoch, setContextEpoch] = useState(0)
   const [tab, setTab] = useState<Tab>('onair')
@@ -377,7 +378,7 @@ function App() {
   const deleteCustomDj = useCallback(
     (id: string) => {
       persistCustom(customDjs.filter((dj) => dj.id !== id))
-      if (selectedDjId === id) setSelectedDjId(presetDjs[0].id)
+      if (selectedDjId === id) setSelectedDjId(defaultDjId)
     },
     [customDjs, persistCustom, selectedDjId],
   )
