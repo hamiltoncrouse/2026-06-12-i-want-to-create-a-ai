@@ -40,6 +40,32 @@ const reporterRoles = [
   'the sports desk update, using one or two items from context.sports',
 ]
 
+// When the DJ has a venue, the broadcast comes live from inside it and the
+// news/weather/traffic/sports desk is replaced by an in-house restaurant desk.
+const venueReporterRoles = [
+  "the specials board: tonight's specials and a signature dish from venue.specials and venue.signatureDishes",
+  "a word from the kitchen: what Chef (venue.chef) is firing up right now, using venue.signatureDishes",
+  'a shout-out to the floor and the bar: thank one or two people from venue.team by name',
+  "the owner's note: a warm hello from venue.owners",
+  'the events board: what is coming up this week from venue.events',
+  'the bar report: a drink special from venue.drinks and happy hour details',
+]
+
+const venueKindNotes = {
+  intro:
+    'Open the show live from inside venue.name: welcome the room like a host, say you are broadcasting right from the dining room, set the supper-club vibe, then into the first song. One segment, speaker "dj".',
+  songTalk:
+    'If previousTrack is present, back-announce it in one line, then talk up nextTrack. Now and then mention you are live from venue.name or nod to the room. One segment, speaker "dj".',
+  newsWeather:
+    'This is the in-house restaurant desk (no real news, weather, traffic, or sports). The host tosses to a staff member, the staff member (speaker "reporter") introduces themselves by first name and role at the restaurant and delivers (REPORTER_ROLE) using only venue facts, then tosses back. End with one short "dj" segment. Structure: dj, reporter, dj.',
+  commercial:
+    'An in-house promo for venue.name itself: push one special, happy hour, event, or signature dish from the venue data and make people hungry. Mention how to come in or call. One segment, speaker "dj".',
+  bumper:
+    'A produced imaging sweeper for venue.name, 8 to 20 words: the restaurant name and the vibe, straight into the next song. One segment, speaker "imaging".',
+  caller:
+    'A guest in the room or on the phone to the restaurant. Structure: a short "dj" segment, then the "caller" (a neutral first name from callerNames) requesting a song, celebrating a birthday or anniversary at venue.name, or raving about a dish, then a short "dj" segment reacting warmly (maybe send dessert to their table). Structure: dj, caller, dj.',
+}
+
 const angles = [
   'share one true-sounding fact about the artist, the song, or the genre',
   'connect the moment to the current local time of day and what listeners are probably doing',
@@ -93,6 +119,79 @@ function fallbackBreak(body) {
   const callerName = neutralFirstNames[Date.now() % neutralFirstNames.length]
   const reporterName = neutralReporterNames[Date.now() % neutralReporterNames.length]
   const reporterFirst = reporterName.split(/\s+/)[0]
+
+  // Venue DJs broadcast from inside a restaurant; replace the news/weather desk
+  // and sponsors with in-house content even in the offline fallback.
+  const venue = dj.venue && typeof dj.venue === 'object' ? dj.venue : null
+  if (venue) {
+    const rot = (arr, salt = 0) =>
+      Array.isArray(arr) && arr.length ? arr[(Math.floor(Date.now() / 60000) + salt) % arr.length] : ''
+    const vName = venue.name || stationName
+    const nextTitle = next.title
+      ? `${next.title}${next.artist ? ` by ${next.artist}` : ''}`
+      : 'a good one'
+    const special = rot(venue.specials, 1)
+    const dish = rot(venue.signatureDishes, 2)
+    const drink = rot(venue.drinks, 3)
+    const event = rot(venue.events, 4)
+    const teammate = rot(venue.team, 5)
+
+    if (kind === 'bumper') {
+      const script = `${vName}. Live from the dining room. More music right now.`
+      return { kind, title: 'Venue bumper', tease, source: 'fallback', script, segments: [{ speaker: 'imaging', text: script }] }
+    }
+    if (kind === 'newsWeather') {
+      const reporterText = `Hey, it is ${teammate || 'the crew'} here at ${vName}. Tonight, ${special || dish || 'the kitchen is cooking'}. ${event ? `And coming up, ${event}.` : ''} Back to you.`
+      return {
+        kind,
+        title: 'Restaurant desk',
+        tease,
+        source: 'fallback',
+        script: `Let us check in around the room. ${reporterText} Sounds good — back to the music with ${nextTitle}.`,
+        segments: [
+          { speaker: 'dj', text: 'Let us check in around the room.' },
+          { speaker: 'reporter', text: reporterText },
+          { speaker: 'dj', text: `Sounds good — back to the music with ${nextTitle}.` },
+        ],
+      }
+    }
+    if (kind === 'commercial') {
+      const script = `You are listening live from ${vName}. ${special ? `Tonight, ${special}.` : ''} ${dish ? `Get ${dish}.` : ''} ${drink ? `At the bar, ${drink}.` : ''} Come on in or call for a table. Now back to ${nextTitle}.`
+      return { kind, title: 'House promo', tease, source: 'fallback', script, segments: [{ speaker: 'dj', text: script }] }
+    }
+    if (kind === 'caller') {
+      const callerLine = listenerRequests[0]?.text
+        ? `Hi, this is ${callerName}, we are celebrating over here at ${vName}. ${listenerRequests[0].text.slice(0, 160)}`
+        : `Hi, this is ${callerName} at a table here at ${vName}. Could you play ${nextTitle} for us?`
+      return {
+        kind,
+        title: 'From the room',
+        tease,
+        source: 'fallback',
+        script: `We have a table on the line. ${callerLine} You got it — and dessert is on the house.`,
+        segments: [
+          { speaker: 'dj', text: `We have a table on the line. Go ahead, you are on ${stationName}.` },
+          { speaker: 'caller', text: callerLine },
+          { speaker: 'dj', text: `You got it — and dessert is on the house. Here is ${nextTitle}.` },
+        ],
+      }
+    }
+    const venueIntro =
+      kind === 'intro'
+        ? `Good evening, and welcome — you are live from ${vName} in ${city}. ${special ? `Tonight, ${special}.` : ''}`
+        : `${name} back with you, live from ${vName}.`
+    const venueScript = [
+      venueIntro,
+      previous.title && kind !== 'intro'
+        ? `That was ${previous.title}${previous.artist ? ` by ${previous.artist}` : ''}.`
+        : '',
+      next.title ? `Coming up, ${nextTitle}.` : '',
+      dish ? `And the kitchen has ${dish} going.` : '',
+    ]
+      .filter(Boolean)
+      .join(' ')
+    return { kind, title: 'House break', tease, source: 'fallback', script: venueScript, segments: [{ speaker: 'dj', text: venueScript }] }
+  }
 
   if (kind === 'bumper') {
     const script = `${callsign}. ${name}. ${city}. More music right now.`
@@ -269,8 +368,11 @@ export default async function handler(req, res) {
   const queue = Array.isArray(body.queue) ? body.queue.slice(0, 6).map(compactTrack).filter(Boolean) : []
   const steering = compactSteering(body.steering)
   const usageTip = compactUsageTip(body.usageTip)
+  const venue = body.dj && typeof body.dj.venue === 'object' && body.dj.venue ? body.dj.venue : null
+  const activeKindNotes = venue ? venueKindNotes : kindNotes
+  const activeReporterRoles = venue ? venueReporterRoles : reporterRoles
   const angle = angles[Math.floor(Math.random() * angles.length)]
-  const reporterRole = reporterRoles[Math.floor(Math.random() * reporterRoles.length)]
+  const reporterRole = activeReporterRoles[Math.floor(Math.random() * activeReporterRoles.length)]
   const lengthRule =
     kind === 'bumper'
       ? 'Maximum 20 words.'
@@ -290,7 +392,9 @@ export default async function handler(req, res) {
         instructions: [
           'You are the production writer for Airbreak, an AI radio station, writing live on-air copy.',
           'Write compact, spoken radio that sounds live, specific, and human.',
-          'The station broadcasts from context.city. context.weather, context.headlines (local), context.national (US), context.world (international), context.sports, context.facts, and localTime are the only sources of real-world facts — never invent news, scores, or local facts beyond them.',
+          venue
+            ? 'This broadcast originates live from inside dj.venue.name, a (dj.venue.cuisine) in context.city, and you are the in-house host. dj.venue (tagline, owners, chef, team, signatureDishes, specials, drinks, events, hours, vibe, lore) REPLACES all real-world news, weather, traffic, and sports: never mention real news, weather, or scores. Every desk, update, and break is about the restaurant. Weave in the chef, owners, and staff by name naturally, make listeners hungry, treat every listener like a regular in the room, and invite people to come in or call. Keep everything in-world and inviting; never sound like an ad agency.'
+            : 'The station broadcasts from context.city. context.weather, context.headlines (local), context.national (US), context.world (international), context.sports, context.facts, and localTime are the only sources of real-world facts — never invent news, scores, or local facts beyond them.',
           'The DJ persona city is backstory only; the show is local to context.city.',
           'If dj.stationName or dj.callsign is present, use it as the station identity instead of the generic Airbreak name.',
           'previousTrack is the song that just ended before this break. nextTrack is the song that starts after this break. Never say nextTrack already played.',
@@ -303,7 +407,7 @@ export default async function handler(req, res) {
           'All caller and reporter names must be gender-neutral because voices are assigned independently. Use only callerNames for caller first names and only reporterNames for reporter full names. Do not invent gendered caller, reporter, anchor, desk, or field names.',
           'If usageTip is present, you may include it as one natural in-character sentence only if it fits. Never sound like app onboarding or a tutorial.',
           'Return the break as ordered segments, each with a speaker: "dj" for the host, "caller" for a listener on the phone, "reporter" for a station colleague, "imaging" for the produced station voice.',
-          `This break is a "${kind}" break. ${kindNotes[kind]}`,
+          `This break is a "${kind}" break. ${activeKindNotes[kind]}`,
           kind === 'newsWeather' ? `For this break the reporter segment is ${reporterRole}.` : '',
           kind === 'bumper' ? '' : `Angle for this break: ${angle}.`,
           'recentScripts contains what went on air in the last few breaks: never reuse their opening words, jokes, names, or facts, and vary sentence rhythm from break to break.',

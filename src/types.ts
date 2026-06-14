@@ -47,7 +47,27 @@ export type DjProfile = {
   voice: VoiceName
   style: string
   backstory: string
+  venue?: VenueProfile
   color: string
+}
+
+// When a DJ has a venue, the broadcast is framed as coming live from inside it
+// and all real-world news/weather/traffic/sports are replaced by in-house
+// content drawn from these fields.
+export type VenueProfile = {
+  name: string
+  tagline?: string
+  cuisine: string
+  owners: string
+  chef: string
+  team: string[]
+  signatureDishes: string[]
+  specials: string[]
+  drinks: string[]
+  events: string[]
+  hours: string
+  vibe: string
+  lore: string[]
 }
 
 export type StationContext = {

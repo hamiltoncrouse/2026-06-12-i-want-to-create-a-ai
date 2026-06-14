@@ -1,5 +1,6 @@
 import {
   Ban,
+  CalendarDays,
   Cloud,
   Dumbbell,
   Headphones,
@@ -24,6 +25,8 @@ import {
   ThumbsUp,
   Trash2,
   Upload,
+  Users,
+  UtensilsCrossed,
   Volume2,
 } from 'lucide-react'
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react'
@@ -1052,6 +1055,61 @@ function App() {
         {tab === 'station' && (
           <section className="view" key="station">
             <h2 className="viewTitle">Station</h2>
+            {selectedDj.venue ? (
+              <>
+                <div className="infoCard">
+                  <div className="infoTitle">
+                    <MapPin size={17} />
+                    <h3>{selectedDj.venue.name}</h3>
+                  </div>
+                  {selectedDj.venue.tagline && <p>{selectedDj.venue.tagline}</p>}
+                  <p className="factsLine">{selectedDj.venue.hours}</p>
+                  <p className="hintLine">Broadcasting live from the dining room.</p>
+                </div>
+                <div className="infoCard">
+                  <div className="infoTitle">
+                    <UtensilsCrossed size={17} />
+                    <h3>Tonight&apos;s specials</h3>
+                  </div>
+                  {selectedDj.venue.specials.map((item) => (
+                    <p key={item}>{item}</p>
+                  ))}
+                  <div className="infoTitle subTitle">
+                    <h3>From the kitchen</h3>
+                  </div>
+                  <p>{selectedDj.venue.chef}</p>
+                  {selectedDj.venue.signatureDishes.map((item) => (
+                    <p key={item}>{item}</p>
+                  ))}
+                </div>
+                <div className="infoCard">
+                  <div className="infoTitle">
+                    <Users size={17} />
+                    <h3>The team</h3>
+                  </div>
+                  <p>{selectedDj.venue.owners}</p>
+                  {selectedDj.venue.team.map((item) => (
+                    <p key={item}>{item}</p>
+                  ))}
+                </div>
+                <div className="infoCard">
+                  <div className="infoTitle">
+                    <CalendarDays size={17} />
+                    <h3>What&apos;s on</h3>
+                  </div>
+                  {selectedDj.venue.events.map((item) => (
+                    <p key={item}>{item}</p>
+                  ))}
+                  <div className="infoTitle subTitle">
+                    <h3>At the bar</h3>
+                  </div>
+                  {selectedDj.venue.drinks.map((item) => (
+                    <p key={item}>{item}</p>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
             <div className="infoCard">
               <div className="infoTitle">
                 <MapPin size={17} />
@@ -1139,6 +1197,8 @@ function App() {
                 </>
               )}
             </div>
+              </>
+            )}
             <div className="infoCard">
               <div className="infoTitle">
                 <Mic2 size={17} />
