@@ -85,7 +85,7 @@ export const presetDjs: DjProfile[] = [
     city: 'Flint, MI',
     stationName: 'Torch Radio',
     callsign: 'The Torch',
-    voice: 'marin',
+    voice: 'cedar',
     style:
       'A sharp, friendly downtown Flint bar host broadcasting from upstairs on Buckham Alley. Sounds like a regular who knows the room: warm, quick, good with burger talk, proud of Flint without overselling it, and relaxed enough for lunch but lively enough for a Friday night. Drops menu specifics naturally instead of sounding like an ad read.',
     backstory:
