@@ -185,6 +185,56 @@ textarea {
   gap: 18px;
 }
 
+.visualizerWrap {
+  position: relative;
+  isolation: isolate;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Tap flourish: a one-shot color bloom layered over the visualizer. Purely
+   decorative and fully isolated — it never touches the canvas render or audio.
+   Keyed in React so each tap remounts it and replays the animation. */
+.bloom {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(76vw, 320px);
+  height: min(76vw, 320px);
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(
+    circle,
+    var(--dj) 0%,
+    color-mix(in srgb, var(--dj) 38%, transparent) 42%,
+    transparent 70%
+  );
+  mix-blend-mode: screen;
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.35);
+  animation: bloom 0.66s ease-out forwards;
+}
+
+@keyframes bloom {
+  0% {
+    opacity: 0.9;
+    transform: translate(-50%, -50%) scale(0.35);
+  }
+  60% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.75);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bloom {
+    animation-duration: 0.18s;
+  }
+}
+
 .visualizer {
   position: relative;
   width: min(76vw, 320px);
@@ -1252,5 +1302,10 @@ textarea {
 
   .visualizer {
     width: min(52vh, 360px);
+  }
+
+  .bloom {
+    width: min(52vh, 360px);
+    height: min(52vh, 360px);
   }
 }

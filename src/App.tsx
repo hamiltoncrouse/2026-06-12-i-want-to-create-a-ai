@@ -155,6 +155,7 @@ function App() {
     const saved = Number(localStorage.getItem('ai-dj-break-every'))
     return [1, 2, 3, 5].includes(saved) ? saved : 1
   })
+  const [bloomKey, setBloomKey] = useState(0)
   const [requestDraft, setRequestDraft] = useState('')
   const [listenerRequests, setListenerRequests] = useState<ListenerRequest[]>([])
   const [steering, setSteering] = useState<SessionSteering>(restoreSteering)
@@ -532,11 +533,17 @@ function App() {
       <main className="content">
         {tab === 'onair' && (
           <section className="view onAirView" key="onair">
-            <Visualizer analyser={analyser} mode={mode} color={selectedDj.color}>
-              <div className={mode === 'song' ? 'vinyl spinning' : 'vinyl'}>
-                <span className="vinylLabel">{initials(selectedDj.name)}</span>
-              </div>
-            </Visualizer>
+            <div
+              className="visualizerWrap"
+              onPointerDown={() => setBloomKey((key) => key + 1)}
+            >
+              <Visualizer analyser={analyser} mode={mode} color={selectedDj.color}>
+                <div className={mode === 'song' ? 'vinyl spinning' : 'vinyl'}>
+                  <span className="vinylLabel">{initials(selectedDj.name)}</span>
+                </div>
+              </Visualizer>
+              {bloomKey > 0 && <span key={bloomKey} className="bloom" aria-hidden="true" />}
+            </div>
 
             <div className="nowPlaying">
               <p className="eyebrow">{mode === 'break' ? 'Coming up' : 'Now playing'}</p>
