@@ -140,7 +140,11 @@ function App() {
     }
   })
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [selectedDjId, setSelectedDjId] = useState(defaultDjId)
+  // Remember the chosen DJ across refreshes; fall back to Johnny on a first
+  // visit (or if the saved DJ no longer exists).
+  const [selectedDjId, setSelectedDjId] = useState(
+    () => localStorage.getItem('ai-dj-selected') || defaultDjId,
+  )
   const [context, setContext] = useState<StationContext>(emptyContext)
   const [contextEpoch, setContextEpoch] = useState(0)
   const [tab, setTab] = useState<Tab>('onair')
@@ -176,7 +180,10 @@ function App() {
   // top of the built-in profile so they can also be reverted.
   const presetList = presetDjs.map((dj) => ({ ...dj, ...(djOverrides[dj.id] || {}) }))
   const djs = [...presetList, ...customDjs]
-  const selectedDj = djs.find((dj) => dj.id === selectedDjId) || djs[0]
+  const selectedDj =
+    djs.find((dj) => dj.id === selectedDjId) ||
+    djs.find((dj) => dj.id === defaultDjId) ||
+    djs[0]
 
   const handleRequestsAired = useCallback((ids: string[]) => {
     setListenerRequests((requests) => requests.filter((request) => !ids.includes(request.id)))
@@ -235,6 +242,11 @@ function App() {
     loadContext()
     return () => controller.abort()
   }, [targetCity, contextEpoch])
+
+  // Remember which DJ is on so a refresh keeps you where you were.
+  useEffect(() => {
+    localStorage.setItem('ai-dj-selected', selectedDjId)
+  }, [selectedDjId])
 
   // Keep weather, news, and sports fresh during long listening sessions.
   useEffect(() => {
