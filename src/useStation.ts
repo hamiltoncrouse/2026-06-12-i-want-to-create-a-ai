@@ -85,6 +85,25 @@ function trackBrief(track?: Track) {
   }
 }
 
+function isSparseMetadataTrack(track?: Track) {
+  if (!track) return false
+  return (
+    track.metadataConfidence === 'low' ||
+    !track.genre?.length ||
+    !track.mood?.length ||
+    (track.requestTags?.length || 0) <= 1
+  )
+}
+
+function uniqueCandidates(candidates: { index: number; score: number }[]) {
+  const seen = new Set<number>()
+  return candidates.filter((candidate) => {
+    if (seen.has(candidate.index)) return false
+    seen.add(candidate.index)
+    return true
+  })
+}
+
 export function useStation(
   dj: DjProfile,
   context: StationContext,
@@ -828,8 +847,27 @@ export function useStation(
         else candidates.push({ index, score })
       }
 
+      const rotationCandidates = [...candidates]
+      const sparseCandidates = rotationCandidates.filter((candidate) =>
+        isSparseMetadataTrack(activeTracks[candidate.index]),
+      )
       candidates.sort((a, b) => b.score - a.score)
-      for (const candidate of candidates.slice(0, 24)) {
+      const explorationTurn = countRef.current > 0 && countRef.current % 5 === 0
+      const probeCandidates = uniqueCandidates(
+        explorationTurn
+          ? [
+              ...sparseCandidates.slice(0, 8),
+              ...rotationCandidates.slice(0, 8),
+              ...candidates.slice(0, 18),
+            ]
+          : [
+              ...candidates.slice(0, 20),
+              ...sparseCandidates.slice(0, 6),
+              ...rotationCandidates.slice(0, 6),
+            ],
+      )
+
+      for (const candidate of probeCandidates) {
         const track = activeTracks[candidate.index]
         if (track && (await probeTrack(track))) return candidate.index
       }
