@@ -1046,8 +1046,22 @@ export function useStation(
 
       await Promise.all(
         segments.map(async (segment) => {
-          // Pre-recorded assets (ring, guest spot) already have audio.
-          if (segment.audioUrl) return
+          if (segment.audioUrl) {
+            // Pre-recorded assets (ring, guest spot) point at a static file.
+            // Preload them into an in-memory blob so playback at the transition
+            // can't lose a network race and get silently skipped.
+            if (segment.speaker === 'spot' && !segment.audioUrl.startsWith('blob:')) {
+              try {
+                const assetResponse = await fetch(segment.audioUrl)
+                if (assetResponse.ok) {
+                  segment.audioUrl = URL.createObjectURL(await assetResponse.blob())
+                }
+              } catch {
+                // Keep the static URL as a fallback.
+              }
+            }
+            return
+          }
           const voice =
             segment.speaker === 'caller'
               ? callerVoice
