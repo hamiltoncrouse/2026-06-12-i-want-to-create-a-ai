@@ -10,6 +10,7 @@ import {
   scoreTrackForSteering,
   selectBreakKind,
   sfxCategories,
+  shuffleTracks,
   spotBreakDue,
 } from './data'
 import type {
@@ -158,6 +159,7 @@ export function useStation(
   const showNotesRef = useRef<string[]>([])
   const recentTrackIdsRef = useRef<string[]>([])
   const recentArtistsRef = useRef<string[]>([])
+  const passPlayedRef = useRef<Set<string>>(new Set())
   const preloadRef = useRef<Map<string, Promise<BreakPlan>>>(new Map())
   const standbyLinerRef = useRef<Map<string, Promise<BreakPlan | null>>>(new Map())
   const goodTracksRef = useRef<Set<string>>(new Set())
@@ -1378,11 +1380,38 @@ export function useStation(
       const nextCount = prevCount + 1
       countRef.current = nextCount
       setPlayCount(nextCount)
-      const pending = nextIndexPromiseRef.current
+
+      // Track coverage for this pass. Once every playable song has aired,
+      // reshuffle so the next pass through the library plays in a fresh order.
+      const finishedTrack = tracksRef.current[fromIndex]
+      if (finishedTrack?.id) passPlayedRef.current.add(finishedTrack.id)
+      const playable = Math.max(1, tracksRef.current.length - badTracksRef.current.size)
+      let reshuffled = false
+      if (tracksRef.current.length > 2 && passPlayedRef.current.size >= playable) {
+        const newOrder = shuffleTracks(tracksRef.current)
+        tracksRef.current = newOrder
+        setTracks(newOrder)
+        preloadRef.current.clear()
+        nextIndexPromiseRef.current = null
+        passPlayedRef.current.clear()
+        reshuffled = true
+      }
+
+      const pending = reshuffled ? null : nextIndexPromiseRef.current
       nextIndexPromiseRef.current = null
-      const nextIndex = pending
-        ? await pending
-        : await findPlayableIndex((fromIndex + 1) % Math.max(1, tracksRef.current.length))
+      let nextIndex: number
+      if (pending) {
+        nextIndex = await pending
+      } else if (reshuffled) {
+        // Avoid replaying the song that just finished as the first of the
+        // new pass.
+        const excluded = new Set<number>()
+        const justPlayed = tracksRef.current.findIndex((track) => track.id === finishedTrack?.id)
+        if (justPlayed >= 0) excluded.add(justPlayed)
+        nextIndex = await findPlayableIndex(0, excluded)
+      } else {
+        nextIndex = await findPlayableIndex((fromIndex + 1) % Math.max(1, tracksRef.current.length))
+      }
       if (stopRef.current) return
       if (songsSinceBreakRef.current >= breakEveryRef.current) {
         chainRef.current(nextIndex, nextCount, fromIndex)
@@ -1531,6 +1560,7 @@ export function useStation(
     songsSinceBreakRef.current = 0
     recentScriptsRef.current = []
     showNotesRef.current = []
+    passPlayedRef.current.clear()
     void (async () => {
       const startIndex = await findPlayableIndex(indexRef.current)
       if (stopRef.current) return
@@ -1642,6 +1672,7 @@ export function useStation(
     preloadRef.current.clear()
     goodTracksRef.current.clear()
     badTracksRef.current.clear()
+    passPlayedRef.current.clear()
     nextIndexPromiseRef.current = null
     breakSeqRef.current = 0
     setBreakSeq(0)
