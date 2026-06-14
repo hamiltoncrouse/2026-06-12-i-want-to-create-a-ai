@@ -32,7 +32,9 @@ import {
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
 import {
+  blankVenue,
   breakKindLabels,
+  cleanVenue,
   defaultFolderUrl,
   djPalette,
   dominantGenre,
@@ -57,6 +59,7 @@ import type {
   SessionSteering,
   StationContext,
   Track,
+  VenueProfile,
   VoiceName,
 } from './types'
 import { useStation } from './useStation'
@@ -343,21 +346,31 @@ function App() {
     setDraftDj(blankDraft)
   }, [])
 
+  const updateVenue = useCallback((patch: Partial<VenueProfile>) => {
+    setDraftDj((dj) => ({ ...dj, venue: { ...(dj.venue || blankVenue), ...patch } }))
+  }, [])
+
+  const toggleRestaurantMode = useCallback(() => {
+    setDraftDj((dj) => ({ ...dj, venue: dj.venue ? null : { ...blankVenue } }))
+  }, [])
+
   const saveDj = useCallback(() => {
     const name = draftDj.name.trim()
     if (!name) return
+    // A venue with no name is treated as no venue at all.
+    let venue = draftDj.venue ? cleanVenue(draftDj.venue) : null
+    if (venue && !venue.name) venue = null
+    const cleaned = { ...draftDj, name, venue }
     if (editingId == null) {
       const id = `custom-${Date.now()}`
-      persistCustom([...customDjs, { ...draftDj, id, name }])
+      persistCustom([...customDjs, { ...cleaned, id }])
       setSelectedDjId(id)
     } else if (editingId.startsWith('custom-')) {
-      persistCustom(
-        customDjs.map((dj) => (dj.id === editingId ? { ...draftDj, id: editingId, name } : dj)),
-      )
+      persistCustom(customDjs.map((dj) => (dj.id === editingId ? { ...cleaned, id: editingId } : dj)))
       setSelectedDjId(editingId)
     } else {
       // Preset edit: store every field except the id as an override.
-      const override: Partial<DjProfile> = { ...draftDj, name }
+      const override: Partial<DjProfile> = { ...cleaned }
       delete (override as { id?: string }).id
       persistOverrides({ ...djOverrides, [editingId]: override })
       setSelectedDjId(editingId)
@@ -949,6 +962,119 @@ function App() {
                     onChange={(event) => setDraftDj({ ...draftDj, backstory: event.target.value })}
                   />
                 </label>
+
+                <div className="wideField venueToggle">
+                  <button
+                    type="button"
+                    className={draftDj.venue ? 'freqChip active' : 'freqChip'}
+                    onClick={toggleRestaurantMode}
+                  >
+                    <UtensilsCrossed size={15} />
+                    {draftDj.venue ? 'Restaurant mode: on' : 'Restaurant mode: off'}
+                  </button>
+                </div>
+                {draftDj.venue && (
+                  <>
+                    <p className="hintLine wideField">
+                      Broadcast from your venue: news, weather, and traffic are replaced by your
+                      specials, kitchen, staff, and events. Put one item per line in the lists.
+                    </p>
+                    <label>
+                      <span>Restaurant name</span>
+                      <input
+                        value={draftDj.venue.name}
+                        onChange={(event) => updateVenue({ name: event.target.value })}
+                      />
+                    </label>
+                    <label>
+                      <span>Tagline</span>
+                      <input
+                        value={draftDj.venue.tagline || ''}
+                        onChange={(event) => updateVenue({ tagline: event.target.value })}
+                      />
+                    </label>
+                    <label>
+                      <span>Cuisine</span>
+                      <input
+                        value={draftDj.venue.cuisine}
+                        onChange={(event) => updateVenue({ cuisine: event.target.value })}
+                      />
+                    </label>
+                    <label>
+                      <span>Owners</span>
+                      <input
+                        value={draftDj.venue.owners}
+                        onChange={(event) => updateVenue({ owners: event.target.value })}
+                      />
+                    </label>
+                    <label>
+                      <span>Chef</span>
+                      <input
+                        value={draftDj.venue.chef}
+                        onChange={(event) => updateVenue({ chef: event.target.value })}
+                      />
+                    </label>
+                    <label>
+                      <span>Hours</span>
+                      <input
+                        value={draftDj.venue.hours}
+                        onChange={(event) => updateVenue({ hours: event.target.value })}
+                      />
+                    </label>
+                    <label className="wideField">
+                      <span>Vibe</span>
+                      <input
+                        value={draftDj.venue.vibe}
+                        onChange={(event) => updateVenue({ vibe: event.target.value })}
+                      />
+                    </label>
+                    <label className="wideField">
+                      <span>Staff &amp; roles (one per line)</span>
+                      <textarea
+                        value={draftDj.venue.team.join('\n')}
+                        onChange={(event) => updateVenue({ team: event.target.value.split('\n') })}
+                      />
+                    </label>
+                    <label className="wideField">
+                      <span>Signature dishes (one per line)</span>
+                      <textarea
+                        value={draftDj.venue.signatureDishes.join('\n')}
+                        onChange={(event) =>
+                          updateVenue({ signatureDishes: event.target.value.split('\n') })
+                        }
+                      />
+                    </label>
+                    <label className="wideField">
+                      <span>Specials (one per line)</span>
+                      <textarea
+                        value={draftDj.venue.specials.join('\n')}
+                        onChange={(event) => updateVenue({ specials: event.target.value.split('\n') })}
+                      />
+                    </label>
+                    <label className="wideField">
+                      <span>Drinks &amp; bar (one per line)</span>
+                      <textarea
+                        value={draftDj.venue.drinks.join('\n')}
+                        onChange={(event) => updateVenue({ drinks: event.target.value.split('\n') })}
+                      />
+                    </label>
+                    <label className="wideField">
+                      <span>Events (one per line)</span>
+                      <textarea
+                        value={draftDj.venue.events.join('\n')}
+                        onChange={(event) => updateVenue({ events: event.target.value.split('\n') })}
+                      />
+                    </label>
+                    <label className="wideField">
+                      <span>Notes &amp; lore (one per line)</span>
+                      <textarea
+                        value={draftDj.venue.lore.join('\n')}
+                        onChange={(event) => updateVenue({ lore: event.target.value.split('\n') })}
+                      />
+                    </label>
+                  </>
+                )}
+
                 <div className="wideField">
                   <span className="fieldLabel">Color</span>
                   <div className="swatchRow">

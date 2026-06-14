@@ -5,8 +5,47 @@ import type {
   SessionSteering,
   StationContext,
   Track,
+  VenueProfile,
   VoiceName,
 } from './types'
+
+export const blankVenue: VenueProfile = {
+  name: '',
+  tagline: '',
+  cuisine: '',
+  owners: '',
+  chef: '',
+  team: [],
+  signatureDishes: [],
+  specials: [],
+  drinks: [],
+  events: [],
+  hours: '',
+  vibe: '',
+  lore: [],
+}
+
+// Trim text fields and drop empty list lines before saving an edited venue.
+export function cleanVenue(venue: VenueProfile): VenueProfile {
+  const list = (items: string[]) =>
+    (items || []).map((item) => item.trim()).filter(Boolean)
+  const text = (value: string) => (value || '').trim()
+  return {
+    name: text(venue.name),
+    tagline: text(venue.tagline || ''),
+    cuisine: text(venue.cuisine),
+    owners: text(venue.owners),
+    chef: text(venue.chef),
+    team: list(venue.team),
+    signatureDishes: list(venue.signatureDishes),
+    specials: list(venue.specials),
+    drinks: list(venue.drinks),
+    events: list(venue.events),
+    hours: text(venue.hours),
+    vibe: text(venue.vibe),
+    lore: list(venue.lore),
+  }
+}
 
 export const defaultFolderUrl = 'https://mwalk.neocities.org/music/manifest.json'
 

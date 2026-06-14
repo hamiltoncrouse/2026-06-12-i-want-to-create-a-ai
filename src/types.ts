@@ -47,7 +47,7 @@ export type DjProfile = {
   voice: VoiceName
   style: string
   backstory: string
-  venue?: VenueProfile
+  venue?: VenueProfile | null
   color: string
 }
 
