@@ -786,20 +786,38 @@ input[type='range']:disabled::-webkit-slider-thumb {
   color: color-mix(in srgb, var(--dj-card, var(--dj)) 80%, #fff) !important;
 }
 
+.djEdit,
 .djDelete {
   display: grid;
   place-items: center;
   flex: 0 0 auto;
   width: 42px;
   height: 42px;
-  margin-right: 9px;
   border-radius: 13px;
   color: var(--muted);
+}
+
+.djDelete {
+  margin-right: 9px;
+}
+
+.djEdit:hover {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.07);
 }
 
 .djDelete:hover {
   color: #f17777;
   background: rgba(241, 119, 119, 0.1);
+}
+
+.formHeading {
+  margin-bottom: 2px;
+  color: var(--dj);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
 }
 
 .personaCard {

@@ -11,6 +11,7 @@ import {
   Music2,
   Newspaper,
   Pause,
+  Pencil,
   Play,
   Plus,
   Radio,
@@ -121,6 +122,17 @@ function App() {
       return []
     }
   })
+  const [djOverrides, setDjOverrides] = useState<Record<string, Partial<DjProfile>>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('ai-dj-overrides') || '{}') as Record<
+        string,
+        Partial<DjProfile>
+      >
+    } catch {
+      return {}
+    }
+  })
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [selectedDjId, setSelectedDjId] = useState(presetDjs[0].id)
   const [context, setContext] = useState<StationContext>(emptyContext)
   const [contextEpoch, setContextEpoch] = useState(0)
@@ -152,7 +164,10 @@ function App() {
   const previewAudioRef = useRef<HTMLAudioElement | null>(null)
   const previewAudioUrlRef = useRef<string | null>(null)
 
-  const djs = [...presetDjs, ...customDjs]
+  // Preset DJs can be edited; the edits are stored as overrides and merged on
+  // top of the built-in profile so they can also be reverted.
+  const presetList = presetDjs.map((dj) => ({ ...dj, ...(djOverrides[dj.id] || {}) }))
+  const djs = [...presetList, ...customDjs]
   const selectedDj = djs.find((dj) => dj.id === selectedDjId) || djs[0]
 
   const handleRequestsAired = useCallback((ids: string[]) => {
@@ -295,26 +310,72 @@ function App() {
     [setLibrary],
   )
 
-  const saveCustomDj = useCallback(() => {
-    if (!draftDj.name.trim()) return
-    const id = `custom-${Date.now()}`
-    const nextDj = { ...draftDj, id, name: draftDj.name.trim() }
-    const nextCustomDjs = [...customDjs, nextDj]
-    setCustomDjs(nextCustomDjs)
-    localStorage.setItem('ai-dj-custom-djs', JSON.stringify(nextCustomDjs))
-    setSelectedDjId(id)
-    setIsDjFormOpen(false)
+  const persistCustom = useCallback((next: DjProfile[]) => {
+    setCustomDjs(next)
+    localStorage.setItem('ai-dj-custom-djs', JSON.stringify(next))
+  }, [])
+
+  const persistOverrides = useCallback((next: Record<string, Partial<DjProfile>>) => {
+    setDjOverrides(next)
+    localStorage.setItem('ai-dj-overrides', JSON.stringify(next))
+  }, [])
+
+  const startCreate = useCallback(() => {
     setDraftDj(blankDraft)
-  }, [customDjs, draftDj])
+    setEditingId(null)
+    setIsDjFormOpen(true)
+  }, [])
+
+  const startEdit = useCallback((dj: DjProfile) => {
+    setDraftDj({ ...dj })
+    setEditingId(dj.id)
+    setIsDjFormOpen(true)
+  }, [])
+
+  const closeDjForm = useCallback(() => {
+    setIsDjFormOpen(false)
+    setEditingId(null)
+    setDraftDj(blankDraft)
+  }, [])
+
+  const saveDj = useCallback(() => {
+    const name = draftDj.name.trim()
+    if (!name) return
+    if (editingId == null) {
+      const id = `custom-${Date.now()}`
+      persistCustom([...customDjs, { ...draftDj, id, name }])
+      setSelectedDjId(id)
+    } else if (editingId.startsWith('custom-')) {
+      persistCustom(
+        customDjs.map((dj) => (dj.id === editingId ? { ...draftDj, id: editingId, name } : dj)),
+      )
+      setSelectedDjId(editingId)
+    } else {
+      // Preset edit: store every field except the id as an override.
+      const override: Partial<DjProfile> = { ...draftDj, name }
+      delete (override as { id?: string }).id
+      persistOverrides({ ...djOverrides, [editingId]: override })
+      setSelectedDjId(editingId)
+    }
+    closeDjForm()
+  }, [closeDjForm, customDjs, djOverrides, draftDj, editingId, persistCustom, persistOverrides])
+
+  const resetPreset = useCallback(
+    (id: string) => {
+      const next = { ...djOverrides }
+      delete next[id]
+      persistOverrides(next)
+      closeDjForm()
+    },
+    [closeDjForm, djOverrides, persistOverrides],
+  )
 
   const deleteCustomDj = useCallback(
     (id: string) => {
-      const nextCustomDjs = customDjs.filter((dj) => dj.id !== id)
-      setCustomDjs(nextCustomDjs)
-      localStorage.setItem('ai-dj-custom-djs', JSON.stringify(nextCustomDjs))
+      persistCustom(customDjs.filter((dj) => dj.id !== id))
       if (selectedDjId === id) setSelectedDjId(presetDjs[0].id)
     },
-    [customDjs, selectedDjId],
+    [customDjs, persistCustom, selectedDjId],
   )
 
   const previewDraftVoice = useCallback(async () => {
@@ -732,8 +793,17 @@ function App() {
                       <small>{dj.handle}</small>
                       <small className="djTags">
                         {dj.city} · {dj.stationName || 'Airbreak'} · voice “{dj.voice}”
+                        {djOverrides[dj.id] ? ' · edited' : ''}
                       </small>
                     </span>
+                  </button>
+                  <button
+                    className="djEdit"
+                    type="button"
+                    onClick={() => startEdit(dj)}
+                    aria-label={`Edit ${dj.name}`}
+                  >
+                    <Pencil size={16} />
                   </button>
                   {dj.id.startsWith('custom-') && (
                     <button
@@ -764,7 +834,7 @@ function App() {
             <button
               className="secondaryButton"
               type="button"
-              onClick={() => setIsDjFormOpen((open) => !open)}
+              onClick={() => (isDjFormOpen ? closeDjForm() : startCreate())}
             >
               <Plus size={18} />
               {isDjFormOpen ? 'Close editor' : 'Create a DJ'}
@@ -772,6 +842,13 @@ function App() {
 
             {isDjFormOpen && (
               <div className="djForm">
+                <div className="wideField formHeading">
+                  {editingId == null
+                    ? 'New DJ'
+                    : editingId.startsWith('custom-')
+                      ? `Editing ${draftDj.name || 'DJ'}`
+                      : `Editing ${draftDj.name || 'DJ'} (preset)`}
+                </div>
                 <label>
                   <span>Name</span>
                   <input
@@ -876,10 +953,22 @@ function App() {
                     ))}
                   </div>
                 </div>
-                <button className="primaryButton wideField" type="button" onClick={saveCustomDj}>
+                <button className="primaryButton wideField" type="button" onClick={saveDj}>
                   <Save size={18} />
-                  Save DJ
+                  {editingId == null ? 'Save DJ' : 'Update DJ'}
                 </button>
+                {editingId != null &&
+                  !editingId.startsWith('custom-') &&
+                  djOverrides[editingId] && (
+                    <button
+                      className="secondaryButton wideField"
+                      type="button"
+                      onClick={() => resetPreset(editingId)}
+                    >
+                      <RotateCcw size={18} />
+                      Reset to original
+                    </button>
+                  )}
               </div>
             )}
           </section>
