@@ -47,7 +47,7 @@ export const presetDjs: DjProfile[] = [
     style:
       'Classic Eastern Connecticut morning-drive jock: warm, quick, neighborly, confident, funny without being slick, and always rooted in Norwich. He naturally drops in local sponsors and civic traditions when they fit, especially Blue Ribbon Pontiac, Joe Goldberg, and the Rose Arts Festival.',
     backstory:
-      'Johnny London, born Jean Gildart, was the #1 morning drive personality in Eastern Connecticut through the 1970s, 1980s, and 1990s. He helped define WICH 1310 AM Personality Radio in Norwich, Connecticut: a 5,000-watt community station with roots back to September 1946, originally WNOC. Johnny is remembered for his 1973 fifty-four-hour continuous record-spinning endurance marathon for local youth football, his crusade to help save the historic Wauregan Hotel, and a 1997 radiothon that kept a historic Abraham Lincoln banner in Norwich. He knows Tower Hill Road, the three-tower array, Hall Communications, and the old-school WICH lineup, including Stu Bryer and Potpourri. He loves talking about Blue Ribbon Pontiac at 400 West Thames Street and owner Joe Goldberg, and he brings up the Rose Arts Festival like a hometown ritual: music acts all over town, the Pancake Breakfast, and the Rotary Club volunteers making it happen.',
+      'Johnny London, born Jean Gildart, was the #1 morning drive personality in Eastern Connecticut through the 1970s, 1980s, and 1990s. He helped define WICH 1310 AM Personality Radio in Norwich, Connecticut: a 5,000-watt community station with roots back to September 1946, originally WNOC. Johnny is remembered for his 1973 fifty-four-hour continuous record-spinning endurance marathon for local youth football, his crusade to help save the historic Wauregan Hotel, and a 1997 radiothon that kept a historic Abraham Lincoln banner in Norwich. He knows Tower Hill Road, the three-tower array, Hall Communications, and the old-school WICH lineup, including Stu Bryer and Potpourri. He loves talking about Blue Ribbon Pontiac at 400 West Thaymes Street and owner Joe Goldberg, and he brings up the Rose Arts Festival like a hometown ritual: music acts all over town, the Pancake Breakfast, and the Rotary Club volunteers making it happen.',
     color: '#f45d48',
   },
   {
@@ -231,7 +231,7 @@ export const djSpots: Record<string, ProducedSpot[]> = {
             "Time to ring up the Tigers over at Blue Ribbon Pontiac. Joe Goldberg always has a deal cooking. Let's get him on the line.",
             "You want a Pontiac, you call the best. Joe Goldberg, a Cherry Hill man, down at Blue Ribbon Pontiac in West Norwich. Let me dial him up.",
             "Let's see what the Tigers down at Blue Ribbon Pontiac have on the lot today. Joe, you there?",
-            "Our pal Joe Goldberg is standing by at Blue Ribbon Pontiac on West Thames Street. Let's give him a call and see what's moving.",
+            "Our pal Joe Goldberg is standing by at Blue Ribbon Pontiac on West Thaymes Street. Let's give him a call and see what's moving.",
           ],
         },
         { speaker: 'spot', audioUrl: '/audio/phone-ring.mp3' },
@@ -239,12 +239,12 @@ export const djSpots: Record<string, ProducedSpot[]> = {
         {
           speaker: 'dj',
           texts: [
-            "Come on down to Blue Ribbon Pontiac, four hundred West Thames Street in West Norwich. Thanks, Joe. Alright, back to the music.",
+            "Come on down to Blue Ribbon Pontiac, four hundred West Thaymes Street in West Norwich. Thanks, Joe. Alright, back to the music.",
             "That's Joe Goldberg and the Tigers at Blue Ribbon Pontiac. Come on down, tell him Johnny sent you. Say hi to Marcie. Now, back to the music.",
-            "Come on down to Blue Ribbon Pontiac on West Thames Street in West Norwich. Best Pontiac deals around. Thanks, Joe. Back to the tunes.",
+            "Come on down to Blue Ribbon Pontiac on West Thaymes Street in West Norwich. Best Pontiac deals around. Thanks, Joe. Back to the tunes.",
             "Joe Goldberg, Blue Ribbon Pontiac. Come on down and drive home a brand new Pontiac today. Give Marcie our best. Alright, back to the music.",
-            "That's the Tigers down at Blue Ribbon Pontiac in West Norwich. Come on down, four hundred West Thames Street. Thanks, Joe. Now let's get back to it.",
-            "Joe Goldberg, all the way from Cherry Hill to the Blue Ribbon lot on West Thames Street. Come on down. Thanks, Joe, and back to the music.",
+            "That's the Tigers down at Blue Ribbon Pontiac in West Norwich. Come on down, four hundred West Thaymes Street. Thanks, Joe. Now let's get back to it.",
+            "Joe Goldberg, all the way from Cherry Hill to the Blue Ribbon lot on West Thaymes Street. Come on down. Thanks, Joe, and back to the music.",
           ],
         },
       ],
