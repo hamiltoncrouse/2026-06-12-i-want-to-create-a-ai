@@ -141,14 +141,9 @@ function App() {
   const [requestDraft, setRequestDraft] = useState('')
   const [listenerRequests, setListenerRequests] = useState<ListenerRequest[]>([])
   const [genreList, setGenreList] = useState<{ file: string; label: string; count: number }[]>([])
-  const [selectedGenres, setSelectedGenres] = useState<string[]>(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem('ai-dj-genres') || '[]')
-      return Array.isArray(saved) ? (saved as string[]) : []
-    } catch {
-      return []
-    }
-  })
+  // Always start on "All" (everything); genre filtering is a per-session
+  // choice that resets each time the app opens.
+  const [selectedGenres, setSelectedGenres] = useState<string[]>([])
   const [previewingVoice, setPreviewingVoice] = useState(false)
   const [voicePreviewStatus, setVoicePreviewStatus] = useState('')
   const previewAudioRef = useRef<HTMLAudioElement | null>(null)
@@ -346,7 +341,6 @@ function App() {
         const next = current.includes(file)
           ? current.filter((genre) => genre !== file)
           : [...current, file]
-        localStorage.setItem('ai-dj-genres', JSON.stringify(next))
         loadGenres(next)
         return next
       })
@@ -356,17 +350,16 @@ function App() {
 
   const selectAllGenres = useCallback(() => {
     setSelectedGenres([])
-    localStorage.setItem('ai-dj-genres', '[]')
     loadGenres([])
   }, [loadGenres])
 
-  // Auto-load the saved genre selection (or everything) when the app opens.
+  // Always open on the full library; the user narrows it by tapping a genre.
   const autoLoadedRef = useRef(false)
   useEffect(() => {
     if (autoLoadedRef.current) return
     autoLoadedRef.current = true
-    loadGenres(selectedGenres)
-  }, [loadGenres, selectedGenres])
+    loadGenres([])
+  }, [loadGenres])
 
   const addLocalFiles = useCallback(
     (files: FileList | null) => {
