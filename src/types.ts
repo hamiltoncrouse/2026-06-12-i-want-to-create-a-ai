@@ -48,6 +48,8 @@ export type DjProfile = {
   style: string
   backstory: string
   venue?: VenueProfile | null
+  // Genre manifest files this DJ opens with; empty/undefined means all genres.
+  genres?: string[]
   color: string
 }
 

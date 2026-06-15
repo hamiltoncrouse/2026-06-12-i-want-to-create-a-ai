@@ -353,13 +353,25 @@ function App() {
     loadGenres([])
   }, [loadGenres])
 
-  // Always open on the full library; the user narrows it by tapping a genre.
-  const autoLoadedRef = useRef(false)
+  // Track the live selection so the DJ effect can avoid needless reloads.
+  const selectedGenresRef = useRef(selectedGenres)
   useEffect(() => {
-    if (autoLoadedRef.current) return
-    autoLoadedRef.current = true
-    loadGenres([])
-  }, [loadGenres])
+    selectedGenresRef.current = selectedGenres
+  }, [selectedGenres])
+
+  // A DJ can carry default genres (empty = all). Selecting a DJ loads its
+  // genres; switching between DJs only reloads if the genre set actually
+  // changes, so picking a same-genre DJ doesn't interrupt playback.
+  const libraryLoadedRef = useRef(false)
+  const djGenresKey = (selectedDj.genres ?? []).join(',')
+  useEffect(() => {
+    const djGenres = djGenresKey ? djGenresKey.split(',') : []
+    const same = djGenres.join(',') === selectedGenresRef.current.join(',')
+    if (libraryLoadedRef.current && same) return
+    libraryLoadedRef.current = true
+    setSelectedGenres(djGenres)
+    loadGenres(djGenres)
+  }, [selectedDjId, djGenresKey, loadGenres])
 
   const addLocalFiles = useCallback(
     (files: FileList | null) => {
@@ -417,6 +429,20 @@ function App() {
 
   const toggleRestaurantMode = useCallback(() => {
     setDraftDj((dj) => ({ ...dj, venue: dj.venue ? null : { ...blankVenue } }))
+  }, [])
+
+  const toggleDraftGenre = useCallback((file: string) => {
+    setDraftDj((dj) => {
+      const current = dj.genres ?? []
+      const next = current.includes(file)
+        ? current.filter((genre) => genre !== file)
+        : [...current, file]
+      return { ...dj, genres: next }
+    })
+  }, [])
+
+  const clearDraftGenres = useCallback(() => {
+    setDraftDj((dj) => ({ ...dj, genres: [] }))
   }, [])
 
   const saveDj = useCallback(() => {
@@ -909,6 +935,35 @@ function App() {
                     onChange={(event) => setDraftDj({ ...draftDj, backstory: event.target.value })}
                   />
                 </label>
+
+                {genreList.length > 0 && (
+                  <div className="wideField">
+                    <span className="fieldLabel">Genres this DJ opens with</span>
+                    <div className="genreOptions">
+                      <button
+                        type="button"
+                        className={
+                          (draftDj.genres?.length ?? 0) === 0 ? 'genreChip active' : 'genreChip'
+                        }
+                        onClick={clearDraftGenres}
+                      >
+                        All
+                      </button>
+                      {genreList.map((genre) => (
+                        <button
+                          key={genre.file}
+                          type="button"
+                          className={
+                            draftDj.genres?.includes(genre.file) ? 'genreChip active' : 'genreChip'
+                          }
+                          onClick={() => toggleDraftGenre(genre.file)}
+                        >
+                          {genre.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="wideField venueToggle">
                   <button
