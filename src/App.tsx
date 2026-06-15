@@ -1,14 +1,11 @@
 import {
-  Ban,
   CalendarDays,
   Cloud,
-  Dumbbell,
   Headphones,
   ListMusic,
   Loader2,
   MapPin,
   Mic2,
-  Moon,
   Music2,
   Newspaper,
   Pause,
@@ -19,10 +16,7 @@ import {
   RotateCcw,
   Save,
   Send,
-  SlidersHorizontal,
   SkipForward,
-  ThumbsDown,
-  ThumbsUp,
   Trash2,
   Upload,
   Users,
@@ -35,33 +29,40 @@ import {
   blankVenue,
   breakKindLabels,
   cleanVenue,
+  defaultDjId,
   defaultFolderUrl,
   djPalette,
-  dominantGenre,
   emptyContext,
   emptySteering,
   formatTime,
-  hasSteering,
   initials,
-  mergeSteering,
-  defaultDjId,
   presetDjs,
   selectBreakKind,
   shuffleTracks,
   splitArtistTitle,
-  steeringLabels,
-  steeringPresets,
   voiceOptions,
 } from './data'
 import type {
   DjProfile,
   ListenerRequest,
-  SessionSteering,
   StationContext,
   Track,
   VenueProfile,
   VoiceName,
 } from './types'
+
+// Pretty display names for genre manifest files.
+const genreLabelOverrides: Record<string, string> = { 'punk-newwave': 'Punk / New Wave' }
+function prettyGenre(file: string) {
+  const base = file.replace(/\.json$/i, '')
+  if (genreLabelOverrides[base]) return genreLabelOverrides[base]
+  return base
+    .split(/[-_]/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
+}
+// The folder the manifest and genre files live in.
+const musicBase = new URL('.', defaultFolderUrl).toString()
 import { useStation } from './useStation'
 import { Visualizer } from './Visualizer'
 
@@ -86,36 +87,6 @@ const blankDraft: DjProfile = {
   style: 'Friendly, witty, specific, concise, and natural on mic.',
   backstory: 'A station host who loves connecting songs to local life.',
   color: '#e0b13b',
-}
-
-function restoreSteering(): SessionSteering {
-  const saved = localStorage.getItem('ai-dj-session-steering')
-  if (!saved) return emptySteering
-  try {
-    const parsed = JSON.parse(saved) as Partial<SessionSteering>
-    return {
-      ...emptySteering,
-      ...parsed,
-      targetMoods: Array.isArray(parsed.targetMoods) ? parsed.targetMoods : [],
-      targetGenres: Array.isArray(parsed.targetGenres) ? parsed.targetGenres : [],
-      avoidGenres: Array.isArray(parsed.avoidGenres) ? parsed.avoidGenres : [],
-      avoidMoods: Array.isArray(parsed.avoidMoods) ? parsed.avoidMoods : [],
-      avoidArtists: Array.isArray(parsed.avoidArtists) ? parsed.avoidArtists : [],
-      tempos: Array.isArray(parsed.tempos) ? parsed.tempos : [],
-      dayparts: Array.isArray(parsed.dayparts) ? parsed.dayparts : [],
-    }
-  } catch {
-    localStorage.removeItem('ai-dj-session-steering')
-    return emptySteering
-  }
-}
-
-function cleanSteeringTerm(value: string) {
-  return value
-    .replace(/\b(music|songs|tracks|records|please|this session|session|for now|in|anymore)\b/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 32)
 }
 
 function App() {
@@ -169,8 +140,15 @@ function App() {
   const [bloomKey, setBloomKey] = useState(0)
   const [requestDraft, setRequestDraft] = useState('')
   const [listenerRequests, setListenerRequests] = useState<ListenerRequest[]>([])
-  const [steering, setSteering] = useState<SessionSteering>(restoreSteering)
-  const [steeringDraft, setSteeringDraft] = useState('')
+  const [genreList, setGenreList] = useState<{ file: string; label: string; count: number }[]>([])
+  const [selectedGenres, setSelectedGenres] = useState<string[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('ai-dj-genres') || '[]')
+      return Array.isArray(saved) ? (saved as string[]) : []
+    } catch {
+      return []
+    }
+  })
   const [previewingVoice, setPreviewingVoice] = useState(false)
   const [voicePreviewStatus, setVoicePreviewStatus] = useState('')
   const previewAudioRef = useRef<HTMLAudioElement | null>(null)
@@ -195,7 +173,7 @@ function App() {
     breakEvery,
     listenerRequests,
     handleRequestsAired,
-    steering,
+    emptySteering,
   )
   const {
     tracks,
@@ -223,9 +201,6 @@ function App() {
   } = station
 
   const targetCity = citySource === 'dj' ? selectedDj.city : stationCity || 'auto'
-  const activeSteering = hasSteering(steering)
-  const steeringSummary = steeringLabels(steering)
-  const currentGenre = dominantGenre(currentTrack)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -254,9 +229,27 @@ function App() {
     return () => window.clearInterval(interval)
   }, [])
 
+  // Load the genre index so the picker can list genres with track counts.
   useEffect(() => {
-    localStorage.setItem('ai-dj-session-steering', JSON.stringify(steering))
-  }, [steering])
+    let cancelled = false
+    ;(async () => {
+      try {
+        const response = await fetch(`${musicBase}index.json`)
+        if (!response.ok) return
+        const obj = (await response.json()) as Record<string, number>
+        if (cancelled) return
+        const list = Object.entries(obj)
+          .map(([file, count]) => ({ file, label: prettyGenre(file), count: Number(count) || 0 }))
+          .sort((a, b) => a.label.localeCompare(b.label))
+        setGenreList(list)
+      } catch {
+        // No index available; the picker just stays on "All".
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const applyStationCity = useCallback(() => {
     const next = cityDraft.trim()
@@ -300,13 +293,80 @@ function App() {
     }
   }, [folderUrl, setLibrary])
 
-  // Load the station playlist automatically so the app opens ready to play.
+  // Load the selected genres (or the whole library) into rotation. Genre files
+  // and the full manifest both come through the library API, which parses the
+  // rich per-track metadata; tracks are merged, de-duped, and shuffled.
+  const loadGenres = useCallback(
+    async (genres: string[]) => {
+      setScanning(true)
+      setLibraryMessage(genres.length ? 'Loading your genres' : 'Loading all music')
+      try {
+        const urls = genres.length ? genres.map((file) => `${musicBase}${file}`) : [defaultFolderUrl]
+        const lists = await Promise.all(
+          urls.map(async (url) => {
+            try {
+              const response = await fetch(`/api/library?${new URLSearchParams({ url })}`)
+              const data = (await response.json()) as { tracks?: Track[] }
+              return response.ok && Array.isArray(data.tracks) ? data.tracks : []
+            } catch {
+              return []
+            }
+          }),
+        )
+        const seen = new Set<string>()
+        const merged: Track[] = []
+        for (const list of lists) {
+          for (const track of list) {
+            if (!seen.has(track.url)) {
+              seen.add(track.url)
+              merged.push(track)
+            }
+          }
+        }
+        if (merged.length) {
+          setLibrary(shuffleTracks(merged))
+          setLibraryMessage(
+            genres.length
+              ? `${genres.length} genre${genres.length > 1 ? 's' : ''} · ${merged.length} tracks`
+              : `All genres · ${merged.length} tracks`,
+          )
+        } else {
+          setLibraryMessage('No tracks found for that selection')
+        }
+      } finally {
+        setScanning(false)
+      }
+    },
+    [setLibrary],
+  )
+
+  const toggleGenre = useCallback(
+    (file: string) => {
+      setSelectedGenres((current) => {
+        const next = current.includes(file)
+          ? current.filter((genre) => genre !== file)
+          : [...current, file]
+        localStorage.setItem('ai-dj-genres', JSON.stringify(next))
+        loadGenres(next)
+        return next
+      })
+    },
+    [loadGenres],
+  )
+
+  const selectAllGenres = useCallback(() => {
+    setSelectedGenres([])
+    localStorage.setItem('ai-dj-genres', '[]')
+    loadGenres([])
+  }, [loadGenres])
+
+  // Auto-load the saved genre selection (or everything) when the app opens.
   const autoLoadedRef = useRef(false)
   useEffect(() => {
     if (autoLoadedRef.current) return
     autoLoadedRef.current = true
-    loadFolder()
-  }, [loadFolder])
+    loadGenres(selectedGenres)
+  }, [loadGenres, selectedGenres])
 
   const addLocalFiles = useCallback(
     (files: FileList | null) => {
@@ -467,79 +527,6 @@ function App() {
   const removeRequest = useCallback((id: string) => {
     setListenerRequests((requests) => requests.filter((request) => request.id !== id))
   }, [])
-
-  const applyPresetSteering = useCallback((presetId: string) => {
-    const preset = steeringPresets.find((item) => item.id === presetId)
-    if (!preset) return
-    setSteering((current) => mergeSteering(current, preset.steering))
-  }, [])
-
-  const resetSteering = useCallback(() => {
-    setSteering({ ...emptySteering })
-  }, [])
-
-  const moreLikeCurrent = useCallback(() => {
-    if (!currentTrack) return
-    const energy = typeof currentTrack.energy === 'number' ? currentTrack.energy : undefined
-    setSteering((current) =>
-      mergeSteering(current, {
-        targetGenres: currentTrack.genre?.slice(0, 2) || [],
-        targetMoods: currentTrack.mood?.slice(0, 2) || [],
-        tempos: currentTrack.tempo ? [currentTrack.tempo] : [],
-        energyRange: energy ? [Math.max(1, energy - 1), Math.min(5, energy + 1)] : current.energyRange,
-        note: `More like ${currentTrack.title} by ${currentTrack.artist}.`,
-      }),
-    )
-  }, [currentTrack])
-
-  const lessLikeCurrent = useCallback(() => {
-    if (!currentTrack) return
-    setSteering((current) =>
-      mergeSteering(current, {
-        avoidGenres: currentTrack.genre?.slice(0, 1) || [],
-        avoidMoods: currentTrack.mood?.slice(0, 1) || [],
-        note: `Move away from the feel of ${currentTrack.title}.`,
-      }),
-    )
-  }, [currentTrack])
-
-  const avoidCurrentGenre = useCallback(() => {
-    if (!currentGenre) return
-    setSteering((current) =>
-      mergeSteering(current, {
-        avoidGenres: [currentGenre],
-        note: `Avoid ${currentGenre} for this session.`,
-      }),
-    )
-  }, [currentGenre])
-
-  const submitSteeringDraft = useCallback(() => {
-    const text = steeringDraft.trim().replace(/\s+/g, ' ').slice(0, 120)
-    if (!text) return
-    const normalized = text.toLowerCase()
-    const next: Partial<SessionSteering> = { note: text }
-    if (/\b(late night|night|smooth|chill|mellow)\b/.test(normalized)) {
-      next.targetMoods = ['late-night', 'smooth', 'warm']
-      next.tempos = ['slow', 'mid']
-      next.energyRange = [1, 3]
-    }
-    if (/\b(gym|workout|uptempo|up tempo|fast|high energy|dance)\b/.test(normalized)) {
-      next.targetMoods = ['upbeat', 'bright', 'dance-floor']
-      next.tempos = ['upbeat', 'fast']
-      next.energyRange = [4, 5]
-    }
-    const avoidMatch = normalized.match(/\b(?:no more|no|less|avoid|skip)\s+([a-z0-9 &-]{2,40})/)
-    if (avoidMatch) {
-      const avoided = cleanSteeringTerm(avoidMatch[1])
-      if (avoided) next.avoidGenres = [avoided]
-    }
-    const genreMatches = ['disco', 'funk', 'rock', 'soul', 'pop', 'jazz', 'r&b', 'country'].filter(
-      (term) => normalized.includes(term) && !next.avoidGenres?.includes(term),
-    )
-    if (!avoidMatch && genreMatches.length) next.targetGenres = genreMatches
-    setSteering((current) => mergeSteering(current, next))
-    setSteeringDraft('')
-  }, [steeringDraft])
 
   const progressPct = progress.duration ? (progress.time / progress.duration) * 100 : 0
   const volumePct = volume * 100
@@ -706,81 +693,36 @@ function App() {
               )}
             </div>
 
-            <div className="steeringPanel">
+            <div className="genrePanel">
               <div className="steeringHeader">
                 <span className="upNextLabel">
-                  <SlidersHorizontal size={13} aria-hidden="true" />
-                  Steer DJ
+                  <Music2 size={13} aria-hidden="true" />
+                  Genres
                 </span>
-                <button
-                  className="resetSteering"
-                  type="button"
-                  onClick={resetSteering}
-                  disabled={!activeSteering}
-                  aria-label="Reset steering"
-                >
-                  <RotateCcw size={15} />
-                </button>
+                {scanning && <Loader2 className="spinIcon" size={15} aria-hidden="true" />}
               </div>
-              <div className="steeringOptions">
-                {steeringPresets.map((preset) => (
+              <div className="genreOptions">
+                <button
+                  type="button"
+                  className={selectedGenres.length === 0 ? 'genreChip active' : 'genreChip'}
+                  onClick={selectAllGenres}
+                  disabled={scanning}
+                >
+                  All
+                </button>
+                {genreList.map((genre) => (
                   <button
-                    className="steerChip"
-                    key={preset.id}
+                    key={genre.file}
                     type="button"
-                    onClick={() => applyPresetSteering(preset.id)}
+                    className={selectedGenres.includes(genre.file) ? 'genreChip active' : 'genreChip'}
+                    onClick={() => toggleGenre(genre.file)}
+                    disabled={scanning}
                   >
-                    {preset.id === 'late-night' ? (
-                      <Moon size={15} aria-hidden="true" />
-                    ) : preset.id === 'gym' ? (
-                      <Dumbbell size={15} aria-hidden="true" />
-                    ) : (
-                      <SlidersHorizontal size={15} aria-hidden="true" />
-                    )}
-                    {preset.label}
+                    {genre.label}
+                    <span className="genreCount">{genre.count}</span>
                   </button>
                 ))}
               </div>
-              <div className="steeringRow">
-                <input
-                  value={steeringDraft}
-                  onChange={(event) => setSteeringDraft(event.target.value)}
-                  onKeyDown={(event) => event.key === 'Enter' && submitSteeringDraft()}
-                  placeholder="Late night, uptempo gym, no disco"
-                  aria-label="Steer the DJ with a music preference"
-                  maxLength={120}
-                />
-                <button
-                  className="iconButton"
-                  type="button"
-                  onClick={submitSteeringDraft}
-                  disabled={!steeringDraft.trim()}
-                  aria-label="Apply steering"
-                >
-                  <Send size={18} />
-                </button>
-              </div>
-              <div className="steeringActions">
-                <button type="button" onClick={moreLikeCurrent} disabled={!currentTrack}>
-                  <ThumbsUp size={15} aria-hidden="true" />
-                  More like this
-                </button>
-                <button type="button" onClick={lessLikeCurrent} disabled={!currentTrack}>
-                  <ThumbsDown size={15} aria-hidden="true" />
-                  Less like this
-                </button>
-                <button type="button" onClick={avoidCurrentGenre} disabled={!currentGenre}>
-                  <Ban size={15} aria-hidden="true" />
-                  {currentGenre ? `No ${currentGenre}` : 'No style'}
-                </button>
-              </div>
-              {activeSteering && (
-                <div className="steeringSummary">
-                  {steeringSummary.map((label) => (
-                    <span key={label}>{label}</span>
-                  ))}
-                </div>
-              )}
             </div>
 
             {nextTrack && nextTrack.id !== currentTrack?.id && (

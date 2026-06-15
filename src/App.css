@@ -602,13 +602,51 @@ input[type='range']:disabled::-webkit-slider-thumb {
   font-size: 11px;
 }
 
-.steeringPanel {
+.steeringPanel,
+.genrePanel {
   display: grid;
   gap: 10px;
   padding: 13px 15px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--card);
+}
+
+.genreOptions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.genreChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.genreChip.active {
+  color: #0c0d10;
+  background: var(--dj);
+  border-color: var(--dj);
+}
+
+.genreChip:disabled {
+  opacity: 0.55;
+}
+
+.genreCount {
+  font-size: 11px;
+  font-weight: 700;
+  opacity: 0.7;
 }
 
 .steeringHeader {
