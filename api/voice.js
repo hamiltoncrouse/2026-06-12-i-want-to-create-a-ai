@@ -15,13 +15,13 @@ const voices = new Set([
 ])
 
 const speakerInstructions = {
-  dj: 'Radio DJ delivery. Natural, conversational, tight pacing.',
+  dj: 'You are a seasoned FM radio DJ on a music station, working the mic. Warm, rich, resonant tone with a smile in the voice and easy confidence. Energetic and forward, smooth and articulate, never flat or robotic. Conversational but punchy: lean into key words, vary your pace, let it breathe, and land the last line with confidence like you are throwing to the song. Sound close to the mic and full-chested.',
   caller:
     'You are an everyday radio listener calling into a station on your cell phone. Casual, spontaneous, real-person energy, a little informal, slightly excited to be on the air.',
   reporter:
     'You are a professional broadcast reporter filing a quick live radio hit. Crisp, fast, authoritative, with a friendly toss back at the end.',
   imaging:
-    'You are a larger-than-life radio station imaging voice. Deep, dramatic, produced, every word lands hard.',
+    'You are a larger-than-life radio station imaging voice. Deep, booming, dramatic, and produced, with big confident energy and every word landing hard.',
 }
 
 export default async function handler(req, res) {

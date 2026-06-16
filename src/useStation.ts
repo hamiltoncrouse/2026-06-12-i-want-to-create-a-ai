@@ -60,6 +60,19 @@ type VoiceFx = {
   air: BiquadFilterNode
 }
 
+// Gentle soft-clip curve for the voice bus: adds warmth/density (that
+// "processed radio" thickness) without audible distortion at low drive.
+function makeSaturationCurve(amount: number) {
+  const samples = 1024
+  const curve = new Float32Array(samples)
+  const norm = Math.tanh(amount)
+  for (let i = 0; i < samples; i++) {
+    const x = (i * 2) / samples - 1
+    curve[i] = Math.tanh(x * amount) / norm
+  }
+  return curve
+}
+
 function artworkDataUrl(color: string) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><rect width="512" height="512" fill="#0a0c11"/><circle cx="256" cy="256" r="200" fill="#15181f"/><circle cx="256" cy="256" r="74" fill="${color}"/><circle cx="256" cy="256" r="12" fill="#0a0c11"/></svg>`
   return `data:image/svg+xml,${encodeURIComponent(svg)}`
@@ -354,32 +367,50 @@ export function useStation(
 
         const voiceLowCut = ctx.createBiquadFilter()
         voiceLowCut.type = 'highpass'
-        voiceLowCut.frequency.value = 85
+        voiceLowCut.frequency.value = 80
         voiceLowCut.Q.value = 0.7
+
+        // Proximity warmth: the close, full-chested low end of a radio voice.
+        const warmth = ctx.createBiquadFilter()
+        warmth.type = 'lowshelf'
+        warmth.frequency.value = 150
+        warmth.gain.value = 3.5
 
         const mudCut = ctx.createBiquadFilter()
         mudCut.type = 'peaking'
-        mudCut.frequency.value = 260
-        mudCut.gain.value = -2.5
+        mudCut.frequency.value = 300
+        mudCut.gain.value = -2
         mudCut.Q.value = 1
 
         const presence = ctx.createBiquadFilter()
         presence.type = 'peaking'
-        presence.frequency.value = 3200
-        presence.gain.value = 3.5
+        presence.frequency.value = 2900
+        presence.gain.value = 3
         presence.Q.value = 0.9
+
+        // De-esser: tame the sibilance/harshness that makes TTS sound brittle.
+        const deEss = ctx.createBiquadFilter()
+        deEss.type = 'peaking'
+        deEss.frequency.value = 6500
+        deEss.gain.value = -3
+        deEss.Q.value = 2.2
 
         const air = ctx.createBiquadFilter()
         air.type = 'highshelf'
-        air.frequency.value = 7600
-        air.gain.value = 1.8
+        air.frequency.value = 10500
+        air.gain.value = 2
+
+        // Subtle harmonic saturation for that dense, "produced" radio thickness.
+        const saturator = ctx.createWaveShaper()
+        saturator.curve = makeSaturationCurve(1.6)
+        saturator.oversample = '2x'
 
         const compressor = ctx.createDynamicsCompressor()
-        compressor.threshold.value = -25
-        compressor.knee.value = 18
-        compressor.ratio.value = 5.5
-        compressor.attack.value = 0.006
-        compressor.release.value = 0.16
+        compressor.threshold.value = -26
+        compressor.knee.value = 16
+        compressor.ratio.value = 6
+        compressor.attack.value = 0.005
+        compressor.release.value = 0.18
 
         const limiter = ctx.createDynamicsCompressor()
         limiter.threshold.value = -4
@@ -389,13 +420,16 @@ export function useStation(
         limiter.release.value = 0.08
 
         const output = ctx.createGain()
-        output.gain.value = 0.95
+        output.gain.value = 1
 
         voiceBus.connect(voiceLowCut)
-        voiceLowCut.connect(mudCut)
+        voiceLowCut.connect(warmth)
+        warmth.connect(mudCut)
         mudCut.connect(presence)
-        presence.connect(air)
-        air.connect(compressor)
+        presence.connect(deEss)
+        deEss.connect(air)
+        air.connect(saturator)
+        saturator.connect(compressor)
         compressor.connect(limiter)
         limiter.connect(output)
         output.connect(node)
