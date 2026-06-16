@@ -1,6 +1,7 @@
 import {
   CalendarDays,
   Cloud,
+  Download,
   Headphones,
   ListMusic,
   Loader2,
@@ -63,6 +64,10 @@ function prettyGenre(file: string) {
 }
 // The folder the manifest and genre files live in.
 const musicBase = new URL('.', defaultFolderUrl).toString()
+
+// Minimal shape of a Screen Wake Lock sentinel (avoids depending on DOM lib
+// typings that aren't always present in the build).
+type WakeLockLike = { release: () => Promise<void> }
 import { useStation } from './useStation'
 import { Visualizer } from './Visualizer'
 
@@ -148,6 +153,9 @@ function App() {
   const [voicePreviewStatus, setVoicePreviewStatus] = useState('')
   const previewAudioRef = useRef<HTMLAudioElement | null>(null)
   const previewAudioUrlRef = useRef<string | null>(null)
+  const djFormRef = useRef<HTMLDivElement | null>(null)
+  const importInputRef = useRef<HTMLInputElement | null>(null)
+  const [importMessage, setImportMessage] = useState('')
 
   // Preset DJs can be edited; the edits are stored as overrides and merged on
   // top of the built-in profile so they can also be reverted.
@@ -217,6 +225,46 @@ function App() {
   useEffect(() => {
     localStorage.setItem('ai-dj-selected', selectedDjId)
   }, [selectedDjId])
+
+  // When the editor opens (create or edit), bring it into view so you can
+  // start typing without hunting for it down the page.
+  useEffect(() => {
+    if (!isDjFormOpen) return
+    const id = window.setTimeout(() => {
+      djFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 60)
+    return () => window.clearTimeout(id)
+  }, [isDjFormOpen, editingId])
+
+  // Hold a screen wake lock while we're on the air so phones don't dim and
+  // suspend audio mid-show. The lock is dropped automatically by the browser
+  // if the tab is hidden, so we re-acquire it whenever the page is shown again.
+  useEffect(() => {
+    if (!isOnAir) return
+    const nav = navigator as Navigator & {
+      wakeLock?: { request: (type: 'screen') => Promise<WakeLockLike> }
+    }
+    if (!nav.wakeLock) return
+    let sentinel: WakeLockLike | null = null
+    let released = false
+    const acquire = async () => {
+      try {
+        sentinel = await nav.wakeLock!.request('screen')
+      } catch {
+        // Ignore: wake lock is best-effort (denied in background, etc.).
+      }
+    }
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && !released) acquire()
+    }
+    acquire()
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      released = true
+      document.removeEventListener('visibilitychange', onVisible)
+      sentinel?.release().catch(() => {})
+    }
+  }, [isOnAir])
 
   // Keep weather, news, and sports fresh during long listening sessions.
   useEffect(() => {
@@ -518,6 +566,60 @@ function App() {
       if (selectedDjId === id) setSelectedDjId(defaultDjId)
     },
     [customDjs, persistCustom, selectedDjId],
+  )
+
+  // Save a DJ to a small JSON file the user can keep or share.
+  const exportDj = useCallback((dj: DjProfile) => {
+    const rest: Partial<DjProfile> = { ...dj }
+    delete rest.id
+    const payload = { type: 'airbreak-dj', version: 1, dj: rest }
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const slug =
+      dj.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'dj'
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${slug}.airbreak-dj.json`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  }, [])
+
+  // Read a DJ JSON file and add it as a new custom DJ, then switch to it.
+  const importDjFile = useCallback(
+    async (file: File) => {
+      setImportMessage('')
+      try {
+        const text = await file.text()
+        const parsed = JSON.parse(text) as
+          | { type?: string; dj?: Partial<DjProfile> }
+          | Partial<DjProfile>
+        // Accept either our wrapped export or a bare DJ object.
+        const raw = (parsed && 'dj' in parsed && parsed.dj ? parsed.dj : parsed) as Partial<DjProfile>
+        if (!raw || typeof raw.name !== 'string' || !raw.name.trim()) {
+          setImportMessage("That file doesn't look like a DJ.")
+          return
+        }
+        const id = `custom-${Date.now()}`
+        const venue = raw.venue ? cleanVenue(raw.venue) : null
+        const imported: DjProfile = {
+          ...blankDraft,
+          ...raw,
+          venue: venue && venue.name ? venue : null,
+          id,
+        }
+        persistCustom([...customDjs, imported])
+        setSelectedDjId(id)
+        setImportMessage(`Imported “${imported.name}.”`)
+      } catch {
+        setImportMessage("Couldn't read that file — make sure it's a DJ export.")
+      }
+    },
+    [customDjs, persistCustom],
   )
 
   const previewDraftVoice = useCallback(async () => {
@@ -829,6 +931,14 @@ function App() {
                   <button
                     className="djEdit"
                     type="button"
+                    onClick={() => exportDj(dj)}
+                    aria-label={`Export ${dj.name}`}
+                  >
+                    <Download size={16} />
+                  </button>
+                  <button
+                    className="djEdit"
+                    type="button"
                     onClick={() => startEdit(dj)}
                     aria-label={`Edit ${dj.name}`}
                   >
@@ -860,17 +970,39 @@ function App() {
               <p>{selectedDj.backstory}</p>
             </div>
 
-            <button
-              className="secondaryButton"
-              type="button"
-              onClick={() => (isDjFormOpen ? closeDjForm() : startCreate())}
-            >
-              <Plus size={18} />
-              {isDjFormOpen ? 'Close editor' : 'Create a DJ'}
-            </button>
+            <div className="djFormActions">
+              <button
+                className="secondaryButton"
+                type="button"
+                onClick={() => (isDjFormOpen ? closeDjForm() : startCreate())}
+              >
+                <Plus size={18} />
+                {isDjFormOpen ? 'Close editor' : 'Create a DJ'}
+              </button>
+              <button
+                className="secondaryButton"
+                type="button"
+                onClick={() => importInputRef.current?.click()}
+              >
+                <Upload size={18} />
+                Import a DJ
+              </button>
+              <input
+                ref={importInputRef}
+                type="file"
+                accept="application/json,.json"
+                hidden
+                onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  if (file) importDjFile(file)
+                  event.target.value = ''
+                }}
+              />
+            </div>
+            {importMessage && <p className="smallStatus">{importMessage}</p>}
 
             {isDjFormOpen && (
-              <div className="djForm">
+              <div className="djForm" ref={djFormRef}>
                 <div className="wideField formHeading">
                   {editingId == null
                     ? 'New DJ'

@@ -893,6 +893,17 @@ input[type='range']:disabled::-webkit-slider-thumb {
   background: rgba(241, 119, 119, 0.1);
 }
 
+.djFormActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.djFormActions .secondaryButton {
+  flex: 1 1 160px;
+  width: auto;
+}
+
 .formHeading {
   margin-bottom: 2px;
   color: var(--dj);
