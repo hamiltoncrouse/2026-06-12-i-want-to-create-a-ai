@@ -51,6 +51,7 @@ export type StationMode = 'idle' | 'loading' | 'break' | 'song' | 'paused'
 export type BreakEntry = BreakPlan & { id: number; at: string }
 
 type VoiceFx = {
+  voiceBus: GainNode
   dry: GainNode
   phone: GainNode
   echo: GainNode
@@ -58,6 +59,44 @@ type VoiceFx = {
   compressor: DynamicsCompressorNode
   presence: BiquadFilterNode
   air: BiquadFilterNode
+}
+
+// Find the first and last samples above a quiet threshold so we can trim dead
+// air at the seam between two back-to-back produced assets (e.g. a phone ring
+// running into a recorded voice) without clipping the actual sound.
+function silenceBounds(buffer: AudioBuffer, threshold = 0.0045) {
+  const channels: Float32Array[] = []
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) channels.push(buffer.getChannelData(ch))
+  const len = buffer.length
+  let start = 0
+  let end = len
+  for (let i = 0; i < len; i++) {
+    let loud = false
+    for (const data of channels) {
+      if (Math.abs(data[i]) > threshold) {
+        loud = true
+        break
+      }
+    }
+    if (loud) {
+      start = i
+      break
+    }
+  }
+  for (let i = len - 1; i >= start; i--) {
+    let loud = false
+    for (const data of channels) {
+      if (Math.abs(data[i]) > threshold) {
+        loud = true
+        break
+      }
+    }
+    if (loud) {
+      end = i + 1
+      break
+    }
+  }
+  return { start, end }
 }
 
 // Gentle soft-clip curve for the voice bus: adds warmth/density (that
@@ -149,6 +188,7 @@ export function useStation(
   const sfxBufferCacheRef = useRef<Map<string, { buffer: AudioBuffer; gain: number } | null>>(
     new Map(),
   )
+  const spotBufferCacheRef = useRef<Map<string, AudioBuffer | null>>(new Map())
   const audioCtxRef = useRef<AudioContext | null>(null)
   const analyserNodeRef = useRef<AnalyserNode | null>(null)
   const fxRef = useRef<VoiceFx | null>(null)
@@ -448,7 +488,7 @@ export function useStation(
         node.connect(ctx.destination)
         audioCtxRef.current = ctx
         analyserNodeRef.current = node
-        fxRef.current = { dry, phone, echo, output, compressor, presence, air }
+        fxRef.current = { voiceBus, dry, phone, echo, output, compressor, presence, air }
         setAnalyser(node)
       }
       audioCtxRef.current.resume().catch(() => undefined)
@@ -732,6 +772,110 @@ export function useStation(
     [getBreakAudio],
   )
 
+  const decodeSpotBuffer = useCallback(async (url: string) => {
+    const ctx = audioCtxRef.current
+    if (!ctx) return null
+    const cached = spotBufferCacheRef.current.get(url)
+    if (cached !== undefined) return cached
+    try {
+      const response = await fetch(url)
+      if (!response.ok) {
+        spotBufferCacheRef.current.set(url, null)
+        return null
+      }
+      const buffer = await ctx.decodeAudioData(await response.arrayBuffer())
+      // Spot assets arrive as fresh blob URLs each airing, so cap the cache.
+      if (spotBufferCacheRef.current.size > 12) {
+        const oldest = spotBufferCacheRef.current.keys().next().value
+        if (oldest) spotBufferCacheRef.current.delete(oldest)
+      }
+      spotBufferCacheRef.current.set(url, buffer)
+      return buffer
+    } catch {
+      spotBufferCacheRef.current.set(url, null)
+      return null
+    }
+  }, [])
+
+  // Play a run of consecutive pre-recorded spot assets (e.g. a phone ring
+  // running straight into a recorded voice) as one gapless take: decode each to
+  // a buffer, trim the dead air at the seams, splice them together, and play
+  // the single buffer through the voice chain. This removes the audible gap you
+  // get from swapping the source on a shared <audio> element between clips.
+  const playSpotRun = useCallback(
+    async (urls: string[], onNearEnd?: () => void) => {
+      const ctx = audioCtxRef.current
+      const fx = fxRef.current
+      if (!ctx || !fx) {
+        // No Web Audio graph: fall back to plain sequential element playback.
+        for (let i = 0; i < urls.length; i++) {
+          if (stopRef.current) return
+          await playAudioUrl(urls[i], i === urls.length - 1 ? onNearEnd : undefined)
+        }
+        return
+      }
+
+      const buffers: AudioBuffer[] = []
+      for (const url of urls) {
+        const buffer = await decodeSpotBuffer(url)
+        if (buffer) buffers.push(buffer)
+      }
+      if (!buffers.length || stopRef.current) return
+
+      const rate = ctx.sampleRate
+      const channelCount = Math.max(...buffers.map((b) => b.numberOfChannels))
+      // A short breath between clips so the join is tight but not unnatural.
+      const seamPad = Math.floor(0.06 * rate)
+      const ranges = buffers.map((buffer, i) => {
+        const { start, end } = silenceBounds(buffer)
+        return {
+          // Keep the natural head of the first clip and tail of the last; trim
+          // only the silence at the internal seams.
+          start: i === 0 ? 0 : start,
+          end: i === buffers.length - 1 ? buffer.length : end,
+        }
+      })
+
+      let total = 0
+      ranges.forEach((range, i) => {
+        total += range.end - range.start
+        if (i < buffers.length - 1) total += seamPad
+      })
+      if (total <= 0) return
+
+      const spliced = ctx.createBuffer(channelCount, total, rate)
+      for (let ch = 0; ch < channelCount; ch++) {
+        const dst = spliced.getChannelData(ch)
+        let offset = 0
+        buffers.forEach((buffer, i) => {
+          const src = buffer.getChannelData(Math.min(ch, buffer.numberOfChannels - 1))
+          const { start, end } = ranges[i]
+          for (let s = start; s < end; s++) dst[offset++] = src[s]
+          if (i < buffers.length - 1) offset += seamPad
+        })
+      }
+
+      ctx.resume().catch(() => undefined)
+      return new Promise<void>((resolve) => {
+        const source = ctx.createBufferSource()
+        source.buffer = spliced
+        const gain = ctx.createGain()
+        gain.gain.value = masterRef.current
+        source.connect(gain)
+        gain.connect(fx.voiceBus)
+        if (onNearEnd) {
+          const lead = Math.max(0, spliced.duration - TALKUP_OVERLAP_S)
+          window.setTimeout(() => onNearEnd(), lead * 1000)
+        }
+        source.onended = () => resolve()
+        source.start()
+        // Safety net in case onended never fires.
+        window.setTimeout(() => resolve(), spliced.duration * 1000 + 300)
+      })
+    },
+    [decodeSpotBuffer, playAudioUrl],
+  )
+
   const playPlanAudio = useCallback(
     async (plan: BreakPlan, onNearEnd: () => void) => {
       const voiced: BreakSegment[] = (plan.segments || []).filter((segment) => segment.audioUrl)
@@ -764,13 +908,26 @@ export function useStation(
 
       for (let i = 0; i < voiced.length; i++) {
         if (stopRef.current) break
+        // Play a run of back-to-back pre-recorded spot assets gaplessly (the
+        // phone ring straight into the recorded voice) instead of swapping the
+        // <audio> source between them, which leaves an audible gap.
+        if (voiced[i].speaker === 'spot') {
+          let j = i
+          while (j + 1 < voiced.length && voiced[j + 1].speaker === 'spot') j++
+          setVoiceEffect('spot')
+          const urls = voiced.slice(i, j + 1).map((segment) => segment.audioUrl as string)
+          const runIsLast = j === voiced.length - 1
+          await playSpotRun(urls, runIsLast ? onNearEnd : undefined)
+          i = j
+          continue
+        }
         setVoiceEffect(voiced[i].speaker)
         const isLast = i === voiced.length - 1
         await playAudioUrl(voiced[i].audioUrl as string, isLast ? onNearEnd : undefined)
       }
       setVoiceEffect('dj')
     },
-    [playAudioUrl, playSfx, playStinger, setVoiceEffect, speakFallback],
+    [playAudioUrl, playSfx, playSpotRun, playStinger, setVoiceEffect, speakFallback],
   )
 
   const hasVoicedAudio = useCallback((plan: BreakPlan) => {
