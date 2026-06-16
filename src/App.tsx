@@ -140,7 +140,7 @@ function App() {
   const [bloomKey, setBloomKey] = useState(0)
   const [requestDraft, setRequestDraft] = useState('')
   const [listenerRequests, setListenerRequests] = useState<ListenerRequest[]>([])
-  const [genreList, setGenreList] = useState<{ file: string; label: string; count: number }[]>([])
+  const [genreList, setGenreList] = useState<{ file: string; label: string }[]>([])
   // Always start on "All" (everything); genre filtering is a per-session
   // choice that resets each time the app opens.
   const [selectedGenres, setSelectedGenres] = useState<string[]>([])
@@ -233,8 +233,8 @@ function App() {
         if (!response.ok) return
         const obj = (await response.json()) as Record<string, number>
         if (cancelled) return
-        const list = Object.entries(obj)
-          .map(([file, count]) => ({ file, label: prettyGenre(file), count: Number(count) || 0 }))
+        const list = Object.keys(obj)
+          .map((file) => ({ file, label: prettyGenre(file) }))
           .sort((a, b) => a.label.localeCompare(b.label))
         setGenreList(list)
       } catch {
@@ -771,7 +771,6 @@ function App() {
                     disabled={scanning}
                   >
                     {genre.label}
-                    <span className="genreCount">{genre.count}</span>
                   </button>
                 ))}
               </div>
