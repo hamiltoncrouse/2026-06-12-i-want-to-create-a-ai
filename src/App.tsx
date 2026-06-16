@@ -295,8 +295,10 @@ function App() {
     async (genres: string[]) => {
       setScanning(true)
       setLibraryMessage(genres.length ? 'Loading your genres' : 'Loading all music')
-      try {
-        const urls = genres.length ? genres.map((file) => `${musicBase}${file}`) : [defaultFolderUrl]
+      const fetchTracks = async (sources: string[]) => {
+        const urls = sources.length
+          ? sources.map((file) => `${musicBase}${file}`)
+          : [defaultFolderUrl]
         const lists = await Promise.all(
           urls.map(async (url) => {
             try {
@@ -309,24 +311,55 @@ function App() {
           }),
         )
         const seen = new Set<string>()
-        const merged: Track[] = []
+        const tracks: Track[] = []
         for (const list of lists) {
           for (const track of list) {
             if (!seen.has(track.url)) {
               seen.add(track.url)
-              merged.push(track)
+              tracks.push(track)
             }
           }
         }
-        if (merged.length) {
-          setLibrary(shuffleTracks(merged))
-          setLibraryMessage(
-            genres.length
-              ? `${genres.length} genre${genres.length > 1 ? 's' : ''} · ${merged.length} tracks`
-              : `All genres · ${merged.length} tracks`,
-          )
+        // Which selected genre files came back empty (missing/404/no audio).
+        const missing = sources.filter((_, index) => lists[index].length === 0)
+        return { tracks, missing }
+      }
+
+      try {
+        const { tracks, missing } = await fetchTracks(genres)
+        if (tracks.length) {
+          // Drop any genres that returned nothing so the picker reflects reality.
+          if (missing.length) {
+            const kept = genres.filter((genre) => !missing.includes(genre))
+            setSelectedGenres(kept)
+            setLibraryMessage(
+              `${kept.length || 'All'} genre${kept.length === 1 ? '' : 's'} · ${tracks.length} tracks · ${missing
+                .map(prettyGenre)
+                .join(', ')} unavailable`,
+            )
+          } else {
+            setLibraryMessage(
+              genres.length
+                ? `${genres.length} genre${genres.length > 1 ? 's' : ''} · ${tracks.length} tracks`
+                : `All genres · ${tracks.length} tracks`,
+            )
+          }
+          setLibrary(shuffleTracks(tracks))
+        } else if (genres.length) {
+          // The whole selection is unavailable — fall back to everything so the
+          // room never goes silent, and reset the picker to All.
+          const all = await fetchTracks([])
+          setSelectedGenres([])
+          if (all.tracks.length) {
+            setLibrary(shuffleTracks(all.tracks))
+            setLibraryMessage(
+              `${missing.map(prettyGenre).join(', ')} unavailable — playing all · ${all.tracks.length} tracks`,
+            )
+          } else {
+            setLibraryMessage('Could not load music right now')
+          }
         } else {
-          setLibraryMessage('No tracks found for that selection')
+          setLibraryMessage('Could not load music right now')
         }
       } finally {
         setScanning(false)
