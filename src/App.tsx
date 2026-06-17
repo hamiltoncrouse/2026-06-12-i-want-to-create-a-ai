@@ -62,6 +62,25 @@ function prettyGenre(file: string) {
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ')
 }
+// Some genres show a logo instead of a text label on their chip.
+function genreIcon(file: string) {
+  const base = file.replace(/\.json$/i, '')
+  if (base === 'grateful-dead-live') return <StealYourFace size={20} className="genreStealie" />
+  return null
+}
+// A genre chip's contents: the logo when one exists, otherwise the name.
+function GenreLabel({ file, label }: { file: string; label: string }) {
+  const icon = genreIcon(file)
+  if (icon) {
+    return (
+      <span className="genreChipIcon" role="img" aria-label={label} title={label}>
+        {icon}
+      </span>
+    )
+  }
+  return <>{label}</>
+}
+
 // The folder the manifest and genre files live in.
 const musicBase = new URL('.', defaultFolderUrl).toString()
 
@@ -70,6 +89,7 @@ const musicBase = new URL('.', defaultFolderUrl).toString()
 type WakeLockLike = { release: () => Promise<void> }
 import { useStation } from './useStation'
 import { Visualizer } from './Visualizer'
+import { StealYourFace } from './StealYourFace'
 
 type Tab = 'onair' | 'djs' | 'library' | 'station'
 
@@ -872,7 +892,7 @@ function App() {
                     onClick={() => toggleGenre(genre.file)}
                     disabled={scanning}
                   >
-                    {genre.label}
+                    <GenreLabel file={genre.file} label={genre.label} />
                   </button>
                 ))}
               </div>
@@ -1122,7 +1142,7 @@ function App() {
                           }
                           onClick={() => toggleDraftGenre(genre.file)}
                         >
-                          {genre.label}
+                          <GenreLabel file={genre.file} label={genre.label} />
                         </button>
                       ))}
                     </div>

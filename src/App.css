@@ -643,6 +643,17 @@ input[type='range']:disabled::-webkit-slider-thumb {
   opacity: 0.55;
 }
 
+/* A genre chip whose label is a logo instead of text. */
+.genreChipIcon {
+  display: inline-flex;
+  align-items: center;
+  margin: -2px 0;
+}
+
+.genreStealie {
+  display: block;
+}
+
 .steeringHeader {
   display: flex;
   align-items: center;
