@@ -135,6 +135,7 @@ function trackBrief(track?: Track) {
     requestTags: track.requestTags?.slice(0, 8),
     dayparts: track.dayparts?.slice(0, 4),
     metadataConfidence: track.metadataConfidence,
+    liveShow: track.liveShow,
   }
 }
 

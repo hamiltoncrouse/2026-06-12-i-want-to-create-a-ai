@@ -34,6 +34,14 @@ export type Track = {
   dayparts?: string[]
   weight?: number
   metadataConfidence?: 'high' | 'medium' | 'low' | string
+  // For live recordings (e.g. Grateful Dead shows): where and when it was taped.
+  liveShow?: {
+    date?: string
+    dateText?: string
+    venue?: string
+    location?: string
+    source?: string
+  }
 }
 
 export type DjProfile = {

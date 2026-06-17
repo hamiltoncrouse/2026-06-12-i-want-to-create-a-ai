@@ -1,5 +1,6 @@
 import {
   CalendarDays,
+  Check,
   Cloud,
   Download,
   Headphones,
@@ -94,6 +95,7 @@ type WakeLockLike = { release: () => Promise<void> }
 import { useStation } from './useStation'
 import { Visualizer } from './Visualizer'
 import { StealYourFace } from './StealYourFace'
+import { feedback } from './feedback'
 
 type Tab = 'onair' | 'djs' | 'library' | 'station'
 
@@ -352,10 +354,16 @@ function App() {
   }, [])
 
   const handleToggle = useCallback(() => {
+    feedback('play')
     if (isOnAir) pause()
     else if (mode === 'paused') resume()
     else start()
   }, [isOnAir, mode, pause, resume, start])
+
+  const selectDj = useCallback((id: string) => {
+    feedback('select')
+    setSelectedDjId(id)
+  }, [])
 
   const loadFolder = useCallback(async () => {
     setScanning(true)
@@ -459,6 +467,7 @@ function App() {
 
   const toggleGenre = useCallback(
     (file: string) => {
+      feedback('select')
       setSelectedGenres((current) => {
         const next = current.includes(file)
           ? current.filter((genre) => genre !== file)
@@ -471,6 +480,7 @@ function App() {
   )
 
   const selectAllGenres = useCallback(() => {
+    feedback('select')
     setSelectedGenres([])
     loadGenres([])
   }, [loadGenres])
@@ -956,12 +966,30 @@ function App() {
                   key={dj.id}
                   style={{ '--dj-card': dj.color } as CSSProperties}
                 >
-                  <button className="djSelect" type="button" onClick={() => setSelectedDjId(dj.id)}>
+                  <button
+                    className="djSelect"
+                    type="button"
+                    onClick={() => selectDj(dj.id)}
+                    aria-pressed={dj.id === selectedDj.id}
+                  >
                     <span className="djAvatar large" style={{ background: dj.color }}>
                       {initials(dj.name)}
+                      {dj.id === selectedDj.id && (
+                        <span className="djAvatarCheck" aria-hidden="true">
+                          <Check size={14} strokeWidth={3} />
+                        </span>
+                      )}
                     </span>
                     <span className="djMeta">
-                      <strong>{dj.name}</strong>
+                      <strong>
+                        {dj.name}
+                        {dj.id === selectedDj.id && (
+                          <span className="djOnAirBadge">
+                            <Radio size={11} strokeWidth={2.5} aria-hidden="true" />
+                            On air
+                          </span>
+                        )}
+                      </strong>
                       <small>{dj.handle}</small>
                       <small className="djTags">
                         {dj.city} · {dj.stationName || 'Airbreak'} · voice “{dj.voice}”

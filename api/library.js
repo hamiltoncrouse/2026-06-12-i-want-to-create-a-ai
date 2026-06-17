@@ -54,6 +54,21 @@ function optionalString(value, maxLength = 220) {
   return text ? text.slice(0, maxLength) : undefined
 }
 
+function liveShowMetadata(item) {
+  const show = item && typeof item === 'object' ? item.liveShow : null
+  if (!show || typeof show !== 'object') return undefined
+  const out = {}
+  const venue = optionalString(show.venue, 120)
+  const location = optionalString(show.location, 120)
+  const dateText = optionalString(show.dateText, 60)
+  const date = optionalString(show.date, 30)
+  if (venue) out.venue = venue
+  if (location) out.location = location
+  if (dateText) out.dateText = dateText
+  if (date) out.date = date
+  return Object.keys(out).length ? out : undefined
+}
+
 function trackMetadata(item) {
   if (!item || typeof item !== 'object') return {}
   const metadata = {}
@@ -88,6 +103,8 @@ function trackMetadata(item) {
   if (dayparts) metadata.dayparts = dayparts
   if (typeof weight === 'number') metadata.weight = Number(weight.toFixed(2))
   if (metadataConfidence) metadata.metadataConfidence = metadataConfidence
+  const liveShow = liveShowMetadata(item)
+  if (liveShow) metadata.liveShow = liveShow
   return metadata
 }
 
