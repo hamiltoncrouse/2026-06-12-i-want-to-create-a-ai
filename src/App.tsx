@@ -62,6 +62,10 @@ function prettyGenre(file: string) {
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ')
 }
+// Genre files the app always offers (when reachable) even if the remote
+// index.json has not been updated to list them yet.
+const bundledGenreFiles = ['grateful-dead-live.json']
+
 // Some genres show a logo instead of a text label on their chip.
 function genreIcon(file: string) {
   const base = file.replace(/\.json$/i, '')
@@ -292,22 +296,39 @@ function App() {
     return () => window.clearInterval(interval)
   }, [])
 
-  // Load the genre index so the picker can list genres with track counts.
+  // Load the genre index so the picker can list the available genres. We also
+  // offer a few app-known genres (e.g. the Grateful Dead live collection) even
+  // when the remote index.json has not been updated to list them yet, as long
+  // as the genre file itself actually resolves.
   useEffect(() => {
     let cancelled = false
     ;(async () => {
+      const files = new Set<string>()
       try {
         const response = await fetch(`${musicBase}index.json`)
-        if (!response.ok) return
-        const obj = (await response.json()) as Record<string, number>
-        if (cancelled) return
-        const list = Object.keys(obj)
-          .map((file) => ({ file, label: prettyGenre(file) }))
-          .sort((a, b) => a.label.localeCompare(b.label))
-        setGenreList(list)
+        if (response.ok) {
+          const obj = (await response.json()) as Record<string, number>
+          for (const file of Object.keys(obj)) files.add(file)
+        }
       } catch {
-        // No index available; the picker just stays on "All".
+        // No index available; fall back to whatever bundled genres resolve.
       }
+      await Promise.all(
+        bundledGenreFiles.map(async (file) => {
+          if (files.has(file)) return
+          try {
+            const probe = await fetch(`${musicBase}${file}`, { method: 'HEAD' })
+            if (probe.ok) files.add(file)
+          } catch {
+            // Skip bundled genres that aren't reachable.
+          }
+        }),
+      )
+      if (cancelled || !files.size) return
+      const list = [...files]
+        .map((file) => ({ file, label: prettyGenre(file) }))
+        .sort((a, b) => a.label.localeCompare(b.label))
+      setGenreList(list)
     })()
     return () => {
       cancelled = true
