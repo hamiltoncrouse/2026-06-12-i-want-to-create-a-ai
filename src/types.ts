@@ -58,7 +58,16 @@ export type DjProfile = {
   venue?: VenueProfile | null
   // Genre manifest files this DJ opens with; empty/undefined means all genres.
   genres?: string[]
+  // An optional second host. When present, breaks become a back-and-forth
+  // between the main host and this co-host (each with their own voice).
+  coHost?: CoHostProfile | null
   color: string
+}
+
+export type CoHostProfile = {
+  name: string
+  voice: VoiceName
+  style?: string
 }
 
 // When a DJ has a venue, the broadcast is framed as coming live from inside it
@@ -125,7 +134,7 @@ export type BreakKind =
   | 'bumper'
   | 'caller'
 
-export type BreakSpeaker = 'dj' | 'caller' | 'reporter' | 'imaging' | 'spot'
+export type BreakSpeaker = 'dj' | 'cohost' | 'caller' | 'reporter' | 'imaging' | 'spot'
 
 // A pre-produced advertisement attached to a DJ: the host's lines are voiced
 // at runtime; the "spot" parts play fixed audio assets (phone ring, a guest's

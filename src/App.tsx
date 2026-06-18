@@ -45,6 +45,7 @@ import {
   voiceOptions,
 } from './data'
 import type {
+  CoHostProfile,
   DjProfile,
   ListenerRequest,
   StationContext,
@@ -563,6 +564,20 @@ function App() {
     setDraftDj((dj) => ({ ...dj, venue: dj.venue ? null : { ...blankVenue } }))
   }, [])
 
+  const toggleCoHost = useCallback(() => {
+    setDraftDj((dj) => ({
+      ...dj,
+      coHost: dj.coHost ? null : { name: '', voice: 'echo', style: '' },
+    }))
+  }, [])
+
+  const updateCoHost = useCallback((patch: Partial<CoHostProfile>) => {
+    setDraftDj((dj) => ({
+      ...dj,
+      coHost: { name: '', voice: 'echo', ...(dj.coHost || {}), ...patch },
+    }))
+  }, [])
+
   const toggleDraftGenre = useCallback((file: string) => {
     setDraftDj((dj) => {
       const current = dj.genres ?? []
@@ -583,7 +598,16 @@ function App() {
     // A venue with no name is treated as no venue at all.
     let venue = draftDj.venue ? cleanVenue(draftDj.venue) : null
     if (venue && !venue.name) venue = null
-    const cleaned = { ...draftDj, name, venue }
+    // A co-host needs a name; otherwise drop it back to a solo show.
+    let coHost = draftDj.coHost
+      ? {
+          name: draftDj.coHost.name.trim(),
+          voice: draftDj.coHost.voice,
+          style: (draftDj.coHost.style || '').trim() || undefined,
+        }
+      : null
+    if (coHost && !coHost.name) coHost = null
+    const cleaned = { ...draftDj, name, venue, coHost }
     if (editingId == null) {
       const id = `custom-${Date.now()}`
       persistCustom([...customDjs, { ...cleaned, id }])
@@ -990,9 +1014,13 @@ function App() {
                           </span>
                         )}
                       </strong>
-                      <small>{dj.handle}</small>
+                      <small>
+                        {dj.handle}
+                        {dj.coHost?.name ? ` · with ${dj.coHost.name}` : ''}
+                      </small>
                       <small className="djTags">
                         {dj.city} · {dj.stationName || 'Airbreak'} · voice “{dj.voice}”
+                        {dj.coHost?.name ? ` + “${dj.coHost.voice}”` : ''}
                         {djOverrides[dj.id] ? ' · edited' : ''}
                       </small>
                     </span>
@@ -1168,6 +1196,55 @@ function App() {
                     onChange={(event) => setDraftDj({ ...draftDj, backstory: event.target.value })}
                   />
                 </label>
+
+                <div className="wideField venueToggle">
+                  <button
+                    type="button"
+                    className={draftDj.coHost ? 'freqChip active' : 'freqChip'}
+                    onClick={toggleCoHost}
+                  >
+                    <Users size={15} />
+                    {draftDj.coHost ? 'Co-host: on' : 'Add a co-host'}
+                  </button>
+                </div>
+                {draftDj.coHost && (
+                  <>
+                    <p className="hintLine wideField">
+                      Two hosts share the mic: breaks become a live back-and-forth, each host in
+                      their own voice.
+                    </p>
+                    <label>
+                      <span>Co-host name</span>
+                      <input
+                        value={draftDj.coHost.name}
+                        onChange={(event) => updateCoHost({ name: event.target.value })}
+                      />
+                    </label>
+                    <label>
+                      <span>Co-host voice</span>
+                      <select
+                        value={draftDj.coHost.voice}
+                        onChange={(event) =>
+                          updateCoHost({ voice: event.target.value as VoiceName })
+                        }
+                      >
+                        {voiceOptions.map((voice) => (
+                          <option key={voice} value={voice}>
+                            {voice}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="wideField">
+                      <span>Co-host style</span>
+                      <input
+                        value={draftDj.coHost.style || ''}
+                        onChange={(event) => updateCoHost({ style: event.target.value })}
+                        placeholder="e.g. dry, sarcastic sidekick who pokes holes in everything"
+                      />
+                    </label>
+                  </>
+                )}
 
                 {genreList.length > 0 && (
                   <div className="wideField">

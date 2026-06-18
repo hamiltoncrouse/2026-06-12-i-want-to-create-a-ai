@@ -24,6 +24,7 @@ import type {
   StationContext,
   Track,
   UsageTip,
+  VoiceName,
 } from './types'
 
 const silentAudioUrl =
@@ -1235,8 +1236,10 @@ export function useStation(
       }
       setBufferStatus('Recording the voice takes')
 
-      const callerVoice = pickCompanionVoice(activeDj.voice, key)
-      const reporterVoice = pickCompanionVoice([activeDj.voice, callerVoice], `${key}:reporter`)
+      // Keep callers/reporters from colliding with either host's voice.
+      const hostVoices = [activeDj.voice, activeDj.coHost?.voice].filter(Boolean) as VoiceName[]
+      const callerVoice = pickCompanionVoice(hostVoices, key)
+      const reporterVoice = pickCompanionVoice([...hostVoices, callerVoice], `${key}:reporter`)
 
       await Promise.all(
         segments.map(async (segment) => {
@@ -1261,9 +1264,17 @@ export function useStation(
               ? callerVoice
               : segment.speaker === 'reporter'
                 ? reporterVoice
-                : segment.speaker === 'imaging'
-                  ? imagingVoice(activeDj.voice)
-                  : activeDj.voice
+                : segment.speaker === 'cohost'
+                  ? activeDj.coHost?.voice || callerVoice
+                  : segment.speaker === 'imaging'
+                    ? imagingVoice(activeDj.voice)
+                    : activeDj.voice
+          const style =
+            segment.speaker === 'dj' || segment.speaker === 'imaging'
+              ? activeDj.style
+              : segment.speaker === 'cohost'
+                ? activeDj.coHost?.style || activeDj.style
+                : undefined
           const voiceResponse = await fetch('/api/voice', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1271,7 +1282,7 @@ export function useStation(
               text: segment.text,
               voice,
               speaker: segment.speaker,
-              style: segment.speaker === 'dj' || segment.speaker === 'imaging' ? activeDj.style : undefined,
+              style,
             }),
           })
           if (voiceResponse.ok && voiceResponse.headers.get('content-type')?.includes('audio')) {

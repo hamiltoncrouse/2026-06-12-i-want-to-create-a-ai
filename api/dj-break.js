@@ -1,5 +1,5 @@
 const breakKinds = ['intro', 'songTalk', 'newsWeather', 'commercial', 'bumper', 'caller']
-const speakers = ['dj', 'caller', 'reporter', 'imaging']
+const speakers = ['dj', 'cohost', 'caller', 'reporter', 'imaging']
 
 const neutralFirstNames = ['Pat', 'Jean', 'Alex', 'Sam', 'Casey', 'Jordan', 'Morgan', 'Riley', 'Taylor', 'Avery', 'Jamie', 'Robin']
 const neutralReporterNames = [
@@ -80,6 +80,7 @@ const angles = [
 
 function fallbackBreak(body) {
   const dj = body.dj || {}
+  const coHost = dj.coHost && typeof dj.coHost === 'object' && dj.coHost.name ? dj.coHost : null
   const previous = body.previousTrack || {}
   const next = body.nextTrack || body.currentTrack || {}
   const context = body.context || {}
@@ -272,6 +273,40 @@ function fallbackBreak(body) {
     .filter(Boolean)
     .join(' ')
 
+  // Two-host shows banter back and forth even in the offline fallback.
+  if (coHost) {
+    const leadFirst = String(name).split(/\s+/)[0]
+    const coFirst = String(coHost.name).split(/\s+/)[0]
+    const back =
+      previous.title && kind !== 'intro'
+        ? `${previous.title}${previous.artist ? ` by ${previous.artist}` : ''}`
+        : ''
+    const upNext = next.title
+      ? `${next.title}${next.artist ? ` by ${next.artist}` : ''}`
+      : 'the next one'
+    const segments = [
+      { speaker: 'dj', text: `${intro}${back ? ` That was ${back}.` : ''}` },
+      {
+        speaker: 'cohost',
+        text: `${coFirst} right here next to him, and ${leadFirst}, nobody asked.`,
+      },
+      {
+        speaker: 'dj',
+        text: `Nobody ever asks, ${coFirst}, and it has never once stopped me. Coming up, ${upNext}.`,
+      },
+      { speaker: 'cohost', text: nextFact || `Finally, something worth hearing.` },
+      { speaker: 'dj', text: `Crank it.` },
+    ]
+    return {
+      kind,
+      title: kind === 'commercial' ? 'Commercial break' : 'Crew banter',
+      tease,
+      source: 'fallback',
+      script: segments.map((segment) => segment.text).join(' '),
+      segments,
+    }
+  }
+
   return {
     kind,
     title: kind === 'commercial' ? 'Commercial break' : 'DJ break',
@@ -386,6 +421,10 @@ export default async function handler(req, res) {
   const steering = compactSteering(body.steering)
   const usageTip = compactUsageTip(body.usageTip)
   const venue = body.dj && typeof body.dj.venue === 'object' && body.dj.venue ? body.dj.venue : null
+  const coHost =
+    body.dj && typeof body.dj.coHost === 'object' && body.dj.coHost && body.dj.coHost.name
+      ? body.dj.coHost
+      : null
   const activeKindNotes = venue ? venueKindNotes : kindNotes
   const activeReporterRoles = venue ? venueReporterRoles : reporterRoles
   const angle = angles[Math.floor(Math.random() * angles.length)]
@@ -424,7 +463,10 @@ export default async function handler(req, res) {
           'If listenerRequests are present, work at most one into the break naturally, preferably as a request-line mention or caller setup. Do not repeat all queued requests.',
           'All caller and reporter names must be gender-neutral because voices are assigned independently. Use only callerNames for caller first names and only reporterNames for reporter full names. Do not invent gendered caller, reporter, anchor, desk, or field names.',
           'If usageTip is present, you may include it as one natural in-character sentence only if it fits. Never sound like app onboarding or a tutorial.',
-          'Return the break as ordered segments, each with a speaker: "dj" for the host, "caller" for a listener on the phone, "reporter" for a station colleague, "imaging" for the produced station voice.',
+          'Return the break as ordered segments, each with a speaker: "dj" for the host, "cohost" for the second host, "caller" for a listener on the phone, "reporter" for a station colleague, "imaging" for the produced station voice.',
+          coHost
+            ? `This is a TWO-HOST show. The lead host is dj.name (speaker "dj"); the co-host is dj.coHost.name (speaker "cohost"), whose personality is dj.coHost.style. Write the talking breaks as a live back-and-forth between them — three to five short alternating segments where they riff, interrupt, finish each other's thoughts, tease, and disagree for fun before sending it to the song. Both are in-studio hosts, not callers. Keep the chemistry tight and never have one host narrate alone for long when a break could be banter. For bumper/imaging breaks keep a single "imaging" segment; for newsWeather either host can toss to the reporter and the other can react.`
+            : '',
           `This break is a "${kind}" break. ${activeKindNotes[kind]}`,
           kind === 'newsWeather' ? `For this break the reporter segment is ${reporterRole}.` : '',
           kind === 'bumper' ? '' : `Angle for this break: ${angle}.`,
