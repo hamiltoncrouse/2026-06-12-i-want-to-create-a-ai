@@ -285,17 +285,19 @@ function fallbackBreak(body) {
       ? `${next.title}${next.artist ? ` by ${next.artist}` : ''}`
       : 'the next one'
     const segments = [
-      { speaker: 'dj', text: `${intro}${back ? ` That was ${back}.` : ''}` },
+      { speaker: 'dj', text: `${intro} Still the best morning show in ${city}, and you're welcome.` },
       {
         speaker: 'cohost',
-        text: `${coFirst} right here next to him, and ${leadFirst}, nobody asked.`,
+        text: back
+          ? `Nobody said that, ${leadFirst}. That was ${back}, for the people actually here for the music.`
+          : `Nobody said that, ${leadFirst}.`,
       },
+      { speaker: 'dj', text: `They're all thinking it, ${coFirst}. Coming up, ${upNext}.` },
       {
-        speaker: 'dj',
-        text: `Nobody ever asks, ${coFirst}, and it has never once stopped me. Coming up, ${upNext}.`,
+        speaker: 'cohost',
+        text: nextFact || `${leadFirst} picked that one himself, so adjust your expectations.`,
       },
-      { speaker: 'cohost', text: nextFact || `Finally, something worth hearing.` },
-      { speaker: 'dj', text: `Crank it.` },
+      { speaker: 'dj', text: `Ignore ${coFirst}. Crank it up.` },
     ]
     return {
       kind,
@@ -465,7 +467,7 @@ export default async function handler(req, res) {
           'If usageTip is present, you may include it as one natural in-character sentence only if it fits. Never sound like app onboarding or a tutorial.',
           'Return the break as ordered segments, each with a speaker: "dj" for the host, "cohost" for the second host, "caller" for a listener on the phone, "reporter" for a station colleague, "imaging" for the produced station voice.',
           coHost
-            ? `This is a TWO-HOST show. The lead host is dj.name (speaker "dj"); the co-host is dj.coHost.name (speaker "cohost"), whose personality is dj.coHost.style. Write the talking breaks as a live back-and-forth between them — three to five short alternating segments where they riff, interrupt, finish each other's thoughts, tease, and disagree for fun before sending it to the song. Both are in-studio hosts, not callers. Keep the chemistry tight and never have one host narrate alone for long when a break could be banter. For bumper/imaging breaks keep a single "imaging" segment; for newsWeather either host can toss to the reporter and the other can react.`
+            ? `This is a TWO-HOST show. The lead host is dj.name (speaker "dj"); the co-host is dj.coHost.name (speaker "cohost"), whose personality is dj.coHost.style. Write the talking breaks as a REAL CONVERSATION between them, not two people taking turns reading lines. They must talk TO each other: each line should react directly to what the other just said — answer it, build on it, contradict it, interrupt it, or call it out — never two unrelated statements side by side. Have them address each other BY FIRST NAME often (e.g. "Come on, [other host]", "[other host], nobody believes that") so it is obvious they are two different people. Let them step on each other, ask each other questions, and trail off. Use four to six short segments, and do not always start with the lead host or alternate perfectly — real conversations are lopsided. They are both in-studio hosts, not callers. For bumper/imaging breaks keep a single "imaging" segment; for newsWeather either host can toss to the reporter and the other can react.`
             : '',
           `This break is a "${kind}" break. ${activeKindNotes[kind]}`,
           kind === 'newsWeather' ? `For this break the reporter segment is ${reporterRole}.` : '',
