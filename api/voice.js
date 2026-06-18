@@ -57,6 +57,7 @@ export default async function handler(req, res) {
         instructions: [
           speakerInstructions[speaker] || speakerInstructions.dj,
           typeof style === 'string' ? style : '',
+          'Keep an even, natural, conversational pace. Do not insert long pauses at commas — keep phrases connected and flowing rather than clipping a beat after every comma, especially around a name in direct address.',
         ]
           .filter(Boolean)
           .join(' '),

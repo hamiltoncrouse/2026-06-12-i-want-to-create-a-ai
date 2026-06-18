@@ -118,6 +118,21 @@ function artworkDataUrl(color: string) {
   return `data:image/svg+xml,${encodeURIComponent(svg)}`
 }
 
+// OpenAI's TTS leaves a heavy pause at a comma, which sounds wrong in a
+// trailing direct address ("Sure did, Rex." -> a long gap before the name).
+// Drop just that comma so the name stays in the same breath. Only touches
+// names that are spoken to the end of a clause, so it never mangles list or
+// place commas mid-sentence.
+function softenVocatives(text: string, names: string[]) {
+  const escaped = names
+    .map((name) => name.trim().split(/\s+/)[0])
+    .filter(Boolean)
+    .map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  if (!escaped.length) return text
+  const re = new RegExp(`,(\\s+(?:${escaped.join('|')}))(\\s*[.!?]|\\s*$)`, 'g')
+  return text.replace(re, '$1$2')
+}
+
 function trackBrief(track?: Track) {
   if (!track) return null
   return {
@@ -1238,6 +1253,7 @@ export function useStation(
 
       // Keep callers/reporters from colliding with either host's voice.
       const hostVoices = [activeDj.voice, activeDj.coHost?.voice].filter(Boolean) as VoiceName[]
+      const hostNames = [activeDj.name, activeDj.coHost?.name].filter(Boolean) as string[]
       const callerVoice = pickCompanionVoice(hostVoices, key)
       const reporterVoice = pickCompanionVoice([...hostVoices, callerVoice], `${key}:reporter`)
 
@@ -1279,7 +1295,7 @@ export function useStation(
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              text: segment.text,
+              text: segment.speaker === 'spot' ? segment.text : softenVocatives(segment.text, hostNames),
               voice,
               speaker: segment.speaker,
               style,
