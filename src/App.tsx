@@ -17,6 +17,7 @@ import {
   Radio,
   RotateCcw,
   Save,
+  Search,
   Send,
   SkipForward,
   Trash2,
@@ -24,8 +25,9 @@ import {
   Users,
   UtensilsCrossed,
   Volume2,
+  X,
 } from 'lucide-react'
-import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react'
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import {
   blankVenue,
@@ -89,6 +91,26 @@ function GenreLabel({ file, label }: { file: string; label: string }) {
 
 // The folder the manifest and genre files live in.
 const musicBase = new URL('.', defaultFolderUrl).toString()
+
+// Normalize an artist name into a stable matching key (case- and "The"-folded)
+// so "The Beatles" and "beatles" collapse to the same artist.
+function normalizeArtist(name: string) {
+  return (name || '')
+    .toLowerCase()
+    .replace(/^the\s+/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+// Narrow a track pool to a chosen set of artists. If the selection matches
+// nothing in this pool (e.g. after a genre change), fall back to the whole
+// pool so the station never goes silent.
+function filterByArtists(pool: Track[], selectedKeys: string[]) {
+  if (!selectedKeys.length) return pool
+  const set = new Set(selectedKeys)
+  const filtered = pool.filter((track) => set.has(normalizeArtist(track.artist)))
+  return filtered.length ? filtered : pool
+}
 
 // Minimal shape of a Screen Wake Lock sentinel (avoids depending on DOM lib
 // typings that aren't always present in the build).
@@ -154,6 +176,17 @@ function App() {
   const [folderUrl, setFolderUrl] = useState(defaultFolderUrl)
   const [libraryMessage, setLibraryMessage] = useState('')
   const [scanning, setScanning] = useState(false)
+  // The full loaded pool (before the artist filter); the rotation shown by the
+  // engine is this pool narrowed to the chosen artists.
+  const [libraryPool, setLibraryPool] = useState<Track[]>([])
+  const [selectedArtists, setSelectedArtists] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('ai-dj-artists') || '[]') as string[]
+    } catch {
+      return []
+    }
+  })
+  const [artistSearch, setArtistSearch] = useState('')
   const [isDjFormOpen, setIsDjFormOpen] = useState(false)
   const [draftDj, setDraftDj] = useState<DjProfile>(blankDraft)
   const [stationCity, setStationCity] = useState(
@@ -229,6 +262,91 @@ function App() {
     playTrack,
     seek,
   } = station
+
+  // Mirror the artist selection and loaded pool into refs so the loaders can
+  // apply the current filter without being recreated on every change.
+  const selectedArtistsRef = useRef(selectedArtists)
+  useEffect(() => {
+    selectedArtistsRef.current = selectedArtists
+  }, [selectedArtists])
+  const libraryPoolRef = useRef(libraryPool)
+  useEffect(() => {
+    libraryPoolRef.current = libraryPool
+  }, [libraryPool])
+
+  // Every music load funnels through here: remember the full pool, then push
+  // the artist-filtered, shuffled rotation into the engine.
+  const commitLibrary = useCallback(
+    (pool: Track[], shuffle = true) => {
+      setLibraryPool(pool)
+      const ordered = shuffle ? shuffleTracks(pool) : pool
+      setLibrary(filterByArtists(ordered, selectedArtistsRef.current))
+    },
+    [setLibrary],
+  )
+
+  // Re-filter the already-loaded pool when the artist selection changes.
+  const reapplyArtists = useCallback(
+    (keys: string[]) => {
+      const pool = libraryPoolRef.current
+      if (pool.length) setLibrary(filterByArtists(shuffleTracks(pool), keys))
+    },
+    [setLibrary],
+  )
+
+  const persistArtists = useCallback((next: string[]) => {
+    localStorage.setItem('ai-dj-artists', JSON.stringify(next))
+  }, [])
+
+  const toggleArtist = useCallback(
+    (key: string) => {
+      feedback('select')
+      setSelectedArtists((current) => {
+        const next = current.includes(key)
+          ? current.filter((artist) => artist !== key)
+          : [...current, key]
+        persistArtists(next)
+        reapplyArtists(next)
+        return next
+      })
+    },
+    [persistArtists, reapplyArtists],
+  )
+
+  const clearArtists = useCallback(() => {
+    feedback('select')
+    setSelectedArtists([])
+    persistArtists([])
+    reapplyArtists([])
+  }, [persistArtists, reapplyArtists])
+
+  // Distinct artists in the loaded pool, with a stable key and a display name.
+  const artistOptions = useMemo(() => {
+    const map = new Map<string, { key: string; name: string; count: number }>()
+    for (const track of libraryPool) {
+      const name = (track.artist || '').trim()
+      if (!name || /^unknown artist$/i.test(name)) continue
+      const key = normalizeArtist(name)
+      const existing = map.get(key)
+      if (existing) existing.count += 1
+      else map.set(key, { key, name, count: 1 })
+    }
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name))
+  }, [libraryPool])
+
+  const artistByKey = useMemo(
+    () => new Map(artistOptions.map((option) => [option.key, option])),
+    [artistOptions],
+  )
+
+  // The pickable artists (search-filtered, selected ones live in their own row).
+  const visibleArtists = useMemo(() => {
+    const query = artistSearch.trim().toLowerCase()
+    const selected = new Set(selectedArtists)
+    let list = artistOptions.filter((option) => !selected.has(option.key))
+    if (query) list = list.filter((option) => option.name.toLowerCase().includes(query))
+    return list.slice(0, 60)
+  }, [artistOptions, artistSearch, selectedArtists])
 
   const targetCity = citySource === 'dj' ? selectedDj.city : stationCity || 'auto'
 
@@ -377,14 +495,14 @@ function App() {
         setLibraryMessage(data.error || 'No playable audio links found')
         return
       }
-      setLibrary(shuffleTracks(data.tracks))
+      commitLibrary(data.tracks)
       setLibraryMessage(`${data.tracks.length} tracks loaded, shuffled`)
     } catch {
       setLibraryMessage('Source scan failed')
     } finally {
       setScanning(false)
     }
-  }, [folderUrl, setLibrary])
+  }, [commitLibrary, folderUrl])
 
   // Load the selected genres (or the whole library) into rotation. Genre files
   // and the full manifest both come through the library API, which parses the
@@ -442,14 +560,14 @@ function App() {
                 : `All genres · ${tracks.length} tracks`,
             )
           }
-          setLibrary(shuffleTracks(tracks))
+          commitLibrary(tracks)
         } else if (genres.length) {
           // The whole selection is unavailable — fall back to everything so the
           // room never goes silent, and reset the picker to All.
           const all = await fetchTracks([])
           setSelectedGenres([])
           if (all.tracks.length) {
-            setLibrary(shuffleTracks(all.tracks))
+            commitLibrary(all.tracks)
             setLibraryMessage(
               `${missing.map(prettyGenre).join(', ')} unavailable — playing all · ${all.tracks.length} tracks`,
             )
@@ -463,7 +581,7 @@ function App() {
         setScanning(false)
       }
     },
-    [setLibrary],
+    [commitLibrary],
   )
 
   const toggleGenre = useCallback(
@@ -522,10 +640,10 @@ function App() {
           }
         })
       if (!nextTracks.length) return
-      setLibrary(nextTracks)
+      commitLibrary(nextTracks, false)
       setLibraryMessage(`${nextTracks.length} local tracks loaded`)
     },
-    [setLibrary],
+    [commitLibrary],
   )
 
   const persistCustom = useCallback((next: DjProfile[]) => {
@@ -1426,6 +1544,77 @@ function App() {
         {tab === 'library' && (
           <section className="view" key="library">
             <h2 className="viewTitle">Library</h2>
+
+            <div className="artistPanel">
+              <div className="steeringHeader">
+                <span className="upNextLabel">
+                  <Users size={13} aria-hidden="true" />
+                  Artists
+                </span>
+                <button
+                  type="button"
+                  className="resetSteering"
+                  onClick={clearArtists}
+                  disabled={!selectedArtists.length}
+                >
+                  All artists
+                </button>
+              </div>
+              <p className="hintLine">
+                Pick the artists you want and the station plays only them. Leave empty for
+                everything.
+              </p>
+              {selectedArtists.length > 0 && (
+                <div className="artistSelected">
+                  {selectedArtists.map((key) => (
+                    <button
+                      key={key}
+                      type="button"
+                      className="artistChip selected"
+                      onClick={() => toggleArtist(key)}
+                      title="Remove"
+                    >
+                      <span>{artistByKey.get(key)?.name || key}</span>
+                      <X size={13} aria-hidden="true" />
+                    </button>
+                  ))}
+                </div>
+              )}
+              {artistOptions.length > 0 && (
+                <>
+                  <div className="artistSearch">
+                    <Search size={15} aria-hidden="true" />
+                    <input
+                      value={artistSearch}
+                      onChange={(event) => setArtistSearch(event.target.value)}
+                      placeholder={`Search ${artistOptions.length} artists…`}
+                      aria-label="Search artists"
+                    />
+                  </div>
+                  <div className="artistOptions">
+                    {visibleArtists.map((option) => (
+                      <button
+                        key={option.key}
+                        type="button"
+                        className="artistChip"
+                        onClick={() => toggleArtist(option.key)}
+                      >
+                        {option.name}
+                      </button>
+                    ))}
+                    {!visibleArtists.length && (
+                      <span className="hintLine">No artists match “{artistSearch}”.</span>
+                    )}
+                  </div>
+                </>
+              )}
+              <p className="smallStatus">
+                {selectedArtists.length
+                  ? `${selectedArtists.length} artist${selectedArtists.length > 1 ? 's' : ''} · ${tracks.length} track${tracks.length === 1 ? '' : 's'} in rotation`
+                  : `All artists · ${tracks.length} tracks`}
+              </p>
+            </div>
+
             <div className="folderRow">
               <input
                 value={folderUrl}

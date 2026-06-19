@@ -661,6 +661,89 @@ input[type='range']:disabled::-webkit-slider-thumb {
   gap: 10px;
 }
 
+/* ---------- Artist filter (Library) ---------- */
+
+.artistPanel {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 13px 15px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
+}
+
+.artistPanel .hintLine {
+  margin: -2px 0 0;
+}
+
+.artistSearch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card-strong);
+  color: var(--muted);
+}
+
+.artistSearch input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  padding: 11px 0;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.artistSearch input:focus {
+  outline: none;
+}
+
+.artistSelected,
+.artistOptions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.artistOptions {
+  max-height: 184px;
+  overflow-y: auto;
+}
+
+.artistChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.artistChip:hover {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--dj) 45%, var(--line));
+}
+
+.artistChip.selected {
+  color: #0c0d10;
+  background: var(--dj);
+  border-color: var(--dj);
+}
+
+.artistChip.selected svg {
+  opacity: 0.75;
+}
+
 .steeringHeader .upNextLabel {
   display: inline-flex;
   align-items: center;
