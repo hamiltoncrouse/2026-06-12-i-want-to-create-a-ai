@@ -105,8 +105,21 @@ async function synthOpenAI({ text, voice, style, speaker }) {
   return Buffer.from(await response.arrayBuffer())
 }
 
+// Accept a few common names for the ElevenLabs key so it works regardless of
+// what the env var was called when it was added.
+function elevenKey() {
+  return (
+    process.env.ELEVENLABS_API_KEY ||
+    process.env.ElevenKey ||
+    process.env.ELEVEN_API_KEY ||
+    process.env.ELEVENLABS_KEY ||
+    ''
+  )
+}
+
 async function synthElevenLabs({ text, voice, speaker }) {
-  if (!process.env.ELEVENLABS_API_KEY) return null
+  const apiKey = elevenKey()
+  if (!apiKey) return null
   const voiceId = elevenVoiceId(voice)
   const model = process.env.ELEVENLABS_MODEL || 'eleven_turbo_v2_5'
   const response = await fetch(
@@ -114,7 +127,7 @@ async function synthElevenLabs({ text, voice, speaker }) {
     {
       method: 'POST',
       headers: {
-        'xi-api-key': process.env.ELEVENLABS_API_KEY,
+        'xi-api-key': apiKey,
         'Content-Type': 'application/json',
         Accept: 'audio/mpeg',
       },
