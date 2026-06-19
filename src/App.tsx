@@ -68,7 +68,7 @@ function prettyGenre(file: string) {
 }
 // Genre files the app always offers (when reachable) even if the remote
 // index.json has not been updated to list them yet.
-const bundledGenreFiles = ['grateful-dead-live.json', 'prog-rock.json']
+const bundledGenreFiles = ['grateful-dead-live.json', 'prog-rock.json', 'hard-rock.json']
 
 // Some genres show a logo instead of a text label on their chip.
 function genreIcon(file: string) {
