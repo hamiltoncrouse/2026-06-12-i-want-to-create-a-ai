@@ -167,6 +167,14 @@ const PRONUNCIATION_FIXES: [RegExp, string][] = [
 function fixPronunciation(text: string) {
   let out = text
   for (const [pattern, replacement] of PRONUNCIATION_FIXES) out = out.replace(pattern, replacement)
+  // "live" the adjective ("a live show", "recorded live") rhymes with "five".
+  // Respell only in clearly adjectival spots so the voice stops using the verb
+  // pronunciation ("live free or die"); the bare verb ("I live here") is left alone.
+  out = out.replace(
+    /\blive\b(?=\s+(?:show|shows|recording|recordings|version|versions|tape|tapes|set|sets|cut|cuts|album|albums|track|tracks|performance|performances|broadcast|jam|jams)\b)/gi,
+    (m) => (m[0] === 'L' ? 'Lyve' : 'lyve'),
+  )
+  out = out.replace(/\b(recorded|playing|caught|heard|captured|performed)(\s+)live\b/gi, '$1$2lyve')
   return out
 }
 
