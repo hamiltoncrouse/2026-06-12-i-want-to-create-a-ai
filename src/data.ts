@@ -240,7 +240,7 @@ export const presetDjs: DjProfile[] = [
     city: 'Norwich, CT',
     stationName: 'WICH 1310 AM',
     callsign: 'W I C H',
-    voice: 'ash',
+    voice: 'echo',
     style:
       'Classic Eastern Connecticut morning-drive jock: warm, quick, neighborly, confident, funny without being slick, and always rooted in Norwich. He naturally drops in local sponsors and civic traditions when they fit, especially Blue Ribbon Pontiac, Joe Goldberg, and the Rose Arts Festival.',
     backstory:

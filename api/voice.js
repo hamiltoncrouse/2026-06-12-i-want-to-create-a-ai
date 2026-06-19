@@ -67,14 +67,43 @@ function mapVoiceToEleven(voice) {
   )
 }
 
+function envNum(name, fallback) {
+  const value = Number(process.env[name])
+  return Number.isFinite(value) ? value : fallback
+}
+
+// Tuned for radio-DJ delivery: stability low enough to stay lively and
+// expressive on the mic without getting erratic, a touch of style, and a hair
+// of extra pace for energy. Station imaging gets more drama; callers stay
+// plain. All values are overridable via env vars.
 function elevenVoiceSettings(speaker) {
+  const speed = envNum('ELEVENLABS_SPEED', 1.04)
+  const similarity = envNum('ELEVENLABS_SIMILARITY', 0.8)
   if (speaker === 'imaging') {
-    return { stability: 0.3, similarity_boost: 0.8, style: 0.6, use_speaker_boost: true }
+    return {
+      stability: envNum('ELEVENLABS_STABILITY', 0.3),
+      similarity_boost: similarity,
+      style: envNum('ELEVENLABS_STYLE', 0.65),
+      use_speaker_boost: true,
+      speed,
+    }
   }
   if (speaker === 'caller') {
-    return { stability: 0.5, similarity_boost: 0.75, style: 0.2, use_speaker_boost: true }
+    return {
+      stability: envNum('ELEVENLABS_STABILITY', 0.5),
+      similarity_boost: 0.75,
+      style: 0.2,
+      use_speaker_boost: true,
+      speed: 1.0,
+    }
   }
-  return { stability: 0.4, similarity_boost: 0.8, style: 0.35, use_speaker_boost: true }
+  return {
+    stability: envNum('ELEVENLABS_STABILITY', 0.4),
+    similarity_boost: similarity,
+    style: envNum('ELEVENLABS_STYLE', 0.4),
+    use_speaker_boost: true,
+    speed,
+  }
 }
 
 // Returns an audio Buffer, or null on any failure (the app then falls back to a
@@ -135,6 +164,9 @@ async function synthElevenLabs({ text, voice, speaker, elevenVoiceId }) {
         text: text.slice(0, 1800),
         model_id: model,
         voice_settings: elevenVoiceSettings(speaker),
+        // 'auto' lets ElevenLabs expand numbers/symbols sensibly; call letters
+        // are already spaced upstream so they read letter by letter.
+        apply_text_normalization: process.env.ELEVENLABS_NORMALIZE || 'auto',
       }),
     },
   )

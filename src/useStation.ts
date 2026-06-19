@@ -133,6 +133,28 @@ function softenVocatives(text: string, names: string[]) {
   return text.replace(re, '$1$2')
 }
 
+// US radio call signs (WICH, KSONO…) read as a word unless the letters are
+// spaced out, which is ElevenLabs' recommended way to spell something letter by
+// letter. Pull the call letters from the DJ's station name / call sign and
+// space any jammed occurrence in the spoken text ("WICH" -> "W I C H").
+function callLetterTokens(dj: DjProfile) {
+  const tokens = new Set<string>()
+  const stationFirst = (dj.stationName || '').trim().split(/\s+/)[0]
+  if (/^[KW][A-Za-z]{2,4}$/.test(stationFirst)) tokens.add(stationFirst.toUpperCase())
+  const jammedCallsign = (dj.callsign || '').replace(/[^A-Za-z]/g, '')
+  if (/^[KW][A-Za-z]{2,4}$/.test(jammedCallsign)) tokens.add(jammedCallsign.toUpperCase())
+  return [...tokens]
+}
+
+function spaceCallLetters(text: string, tokens: string[]) {
+  let out = text
+  for (const token of tokens) {
+    const spaced = token.split('').join(' ')
+    out = out.replace(new RegExp(`\\b${token}\\b`, 'gi'), spaced)
+  }
+  return out
+}
+
 function trackBrief(track?: Track) {
   if (!track) return null
   return {
@@ -1255,6 +1277,7 @@ export function useStation(
       // Keep callers/reporters from colliding with either host's voice.
       const hostVoices = [activeDj.voice, activeDj.coHost?.voice].filter(Boolean) as VoiceName[]
       const hostNames = [activeDj.name, activeDj.coHost?.name].filter(Boolean) as string[]
+      const callLetters = callLetterTokens(activeDj)
       const callerVoice = pickCompanionVoice(hostVoices, key)
       const reporterVoice = pickCompanionVoice([...hostVoices, callerVoice], `${key}:reporter`)
 
@@ -1304,7 +1327,10 @@ export function useStation(
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              text: segment.speaker === 'spot' ? segment.text : softenVocatives(segment.text, hostNames),
+              text:
+                segment.speaker === 'spot'
+                  ? segment.text
+                  : spaceCallLetters(softenVocatives(segment.text, hostNames), callLetters),
               voice,
               speaker: segment.speaker,
               style,
