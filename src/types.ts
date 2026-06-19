@@ -61,6 +61,9 @@ export type DjProfile = {
   // An optional second host. When present, breaks become a back-and-forth
   // between the main host and this co-host (each with their own voice).
   coHost?: CoHostProfile | null
+  // ElevenLabs voice ID for this DJ (used when VOICE_PROVIDER=elevenlabs).
+  // Falls back to a name-based mapping when unset.
+  elevenVoice?: string
   color: string
 }
 
@@ -68,6 +71,7 @@ export type CoHostProfile = {
   name: string
   voice: VoiceName
   style?: string
+  elevenVoice?: string
 }
 
 // When a DJ has a venue, the broadcast is framed as coming live from inside it

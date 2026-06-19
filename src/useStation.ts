@@ -968,6 +968,7 @@ export function useStation(
           voice: activeDj.voice,
           speaker: 'dj',
           style: activeDj.style,
+          elevenVoiceId: activeDj.elevenVoice,
         }),
       })
       if (!voiceResponse.ok || !voiceResponse.headers.get('content-type')?.includes('audio')) {
@@ -1291,6 +1292,14 @@ export function useStation(
               : segment.speaker === 'cohost'
                 ? activeDj.coHost?.style || activeDj.style
                 : undefined
+          // For ElevenLabs, the host and co-host carry their own chosen voice;
+          // callers/reporters/imaging fall back to the name-based mapping.
+          const elevenVoiceId =
+            segment.speaker === 'dj'
+              ? activeDj.elevenVoice
+              : segment.speaker === 'cohost'
+                ? activeDj.coHost?.elevenVoice
+                : undefined
           const voiceResponse = await fetch('/api/voice', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1299,6 +1308,7 @@ export function useStation(
               voice,
               speaker: segment.speaker,
               style,
+              elevenVoiceId,
             }),
           })
           if (voiceResponse.ok && voiceResponse.headers.get('content-type')?.includes('audio')) {

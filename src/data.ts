@@ -154,6 +154,7 @@ export const presetDjs: DjProfile[] = [
         'Complimentary popcorn is part of the Torch bar rhythm',
       ],
     },
+    elevenVoice: 'iP95p4xoKVk53GoZ742B', // Chris — casual, friendly American
     color: '#d6492f',
   },
   {
@@ -228,6 +229,7 @@ export const presetDjs: DjProfile[] = [
         'the corner booth is permanently reserved for the regulars',
       ],
     },
+    elevenVoice: 'pqHfZKP75CvOlQylNhV4', // Bill — warm, trustworthy older American
     color: '#c8462f',
   },
   {
@@ -243,6 +245,7 @@ export const presetDjs: DjProfile[] = [
       'Classic Eastern Connecticut morning-drive jock: warm, quick, neighborly, confident, funny without being slick, and always rooted in Norwich. He naturally drops in local sponsors and civic traditions when they fit, especially Blue Ribbon Pontiac, Joe Goldberg, and the Rose Arts Festival.',
     backstory:
       'Johnny London, born Jean Gildart, was the #1 morning drive personality in Eastern Connecticut through the 1970s, 1980s, and 1990s. He helped define WICH 1310 AM Personality Radio in Norwich, Connecticut: a 5,000-watt community station with roots back to September 1946, originally WNOC. Johnny is remembered for his 1973 fifty-four-hour continuous record-spinning endurance marathon for local youth football, his crusade to help save the historic Wauregan Hotel, and a 1997 radiothon that kept a historic Abraham Lincoln banner in Norwich. He knows Tower Hill Road, the three-tower array, Hall Communications, and the old-school WICH lineup, including Stu Bryer and Potpourri. He loves talking about Blue Ribbon Pontiac at 400 West Thaymes Street and owner Joe Goldberg, and he brings up the Rose Arts Festival like a hometown ritual: music acts all over town, the Pancake Breakfast, and the Rotary Club volunteers making it happen.',
+    elevenVoice: 'nPczCjzI2devNBz1zQrb', // Brian — deep, resonant classic radio
     color: '#f45d48',
   },
   {
@@ -258,6 +261,7 @@ export const presetDjs: DjProfile[] = [
       'Confident, funny, velvet delivery, quick with a cultural reference and a clean punchline.',
     backstory:
       'Mona grew up around her uncle’s record shop and learned radio by producing Sunday-morning community shows.',
+    elevenVoice: 'cgSgspJ2msm6clMCkdW9', // Jessica — expressive, warm female
     color: '#1f9d8a',
   },
   {
@@ -272,6 +276,7 @@ export const presetDjs: DjProfile[] = [
     style: 'Smart, intimate, slightly mysterious, turns song facts into tiny stories.',
     backstory:
       'Ada built a pirate-radio stream in college and now hosts from a converted print shop behind a theater.',
+    elevenVoice: 'pFZP5JQG7iQjIQuC4Bku', // Lily — raspy, intimate female
     color: '#8467d7',
   },
   {
@@ -287,6 +292,7 @@ export const presetDjs: DjProfile[] = [
       'Grounded Flint radio voice: steady, good-humored, direct, working-class, and proud of the city without turning sentimental.',
     backstory:
       'Calvin came up board-oping high school football remotes, union hall fundraisers, and late-night request shows around Genesee County. He talks about records like someone who heard them from a dashboard speaker outside a diner after second shift.',
+    elevenVoice: 'cjVigY5qzO86Huf0OWal', // Eric — grounded, conversational male
     color: '#3b9ce0',
   },
   {
@@ -302,6 +308,7 @@ export const presetDjs: DjProfile[] = [
       'Bright, fast, stylish, and conversational; sounds like a friend with perfect timing and a deep crate of hooks.',
     backstory:
       'Tasha started in street-team promotions, learned production cutting club liners, and now runs a high-energy show built around listener shout-outs and sharp song-to-song momentum.',
+    elevenVoice: 'FGY2WhTYpPnrIDTdsKH5', // Laura — young, bright, upbeat female
     color: '#d75f9e',
   },
   {
@@ -317,6 +324,7 @@ export const presetDjs: DjProfile[] = [
       'Low, smooth, cinematic, and unhurried; makes every segue feel like a story from a neon-lit boulevard.',
     backstory:
       'Ray learned radio producing overnight dedication shows and weekend car-club remotes. He keeps the energy relaxed but never sleepy, with a soft spot for songs that sound best after midnight.',
+    elevenVoice: 'onwK4e9ZLuTAKqWW03F9', // Daniel — deep, smooth, measured
     color: '#e07a3b',
   },
   {
@@ -334,6 +342,7 @@ export const presetDjs: DjProfile[] = [
     backstory:
       'Cosmic Charlie, born Pat Hurley, caught his first show at the Greek Theatre in 1981 and never really came home. He spent two decades following the band coast to coast, flipping grilled cheese on Shakedown Street for gas money, taping every show he could off the soundboard line, and trading reels with a nationwide family of tapers. He swears the best Scarlet-Begonias-into-Fire-on-the-Mountain is May 8th, 1977, at Barton Hall, Cornell, and he will happily tell you exactly why. He reveres Jerry Garcia, Bob Weir, Phil Lesh, and the whole crew, lives for the moment Drums melts into Space and folds back into a song, and still finds miracles in the parking lot. He broadcasts from a converted Airstream wallpapered with ticket stubs under a giant Steal Your Face, spinning live versions, rarities, and the long strange jams that never made it onto the studio records.',
     genres: ['grateful-dead-live.json'],
+    elevenVoice: 'bIHbv24MWmeRgasZH58o', // Will — chill, mellow male
     color: '#9b51e0',
   },
   {
@@ -353,9 +362,11 @@ export const presetDjs: DjProfile[] = [
     coHost: {
       name: 'Roxie Vance',
       voice: 'nova',
+      elevenVoice: '9BWtsMINqrJLrRacOk9x', // Aria — expressive, sharp female
       style:
         'The sharp, sarcastic female co-host whose entire job is needling Rex. Dry, quick, and unimpressed, she addresses him by name constantly — "Rex, nobody believes that," "okay, Rex" — calls out his bragging the second it starts, fact-checks his nonsense, and lands the dry kicker after he overreaches. She is genuinely funny and clearly the smarter one, never mean for its own sake, just permanently one step ahead of him.',
     },
+    elevenVoice: 'CwhRBWXzGAHq8TQ4Fs17', // Roger — confident, brash male
     color: '#e2453a',
   },
 ]

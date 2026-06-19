@@ -29,24 +29,24 @@ const speakerInstructions = {
 const PACING =
   'Keep an even, natural, conversational pace. Do not insert long pauses at commas — keep phrases connected and flowing rather than clipping a beat after every comma, especially around a name in direct address.'
 
-// Map the app's voice names to ElevenLabs voice IDs. These are starter
-// assignments using ElevenLabs' built-in voices, roughly matched by character;
-// override any of them (or add your own/cloned voices) without a code change by
+// Fallback map from the app's voice names to ElevenLabs' built-in default
+// voices (available in every account). Used for callers/reporters and any DJ
+// that doesn't carry an explicit elevenVoice. Override without a code change by
 // setting ELEVENLABS_VOICE_MAP to a JSON object of name -> voiceId.
 const defaultElevenVoiceMap = {
-  ash: 'ErXwobaYiN019PkySvjV', // Antoni (male)
-  echo: 'TxGEqnHWrfWFTfGW9XjX', // Josh (deep male)
-  onyx: 'pNInz6obpgDQGcFmaJgB', // Adam (deep male)
-  fable: 'VR6AewLTigWG4xSOukaG', // Arnold (male)
-  ballad: 'yoZ06aMxZJJ28mfd3POQ', // Sam (male)
-  cedar: 'VR6AewLTigWG4xSOukaG', // Arnold (male)
-  verse: 'ErXwobaYiN019PkySvjV', // Antoni (male)
-  coral: 'EXAVITQu4vr4xnSDxMaL', // Bella (female)
-  nova: 'AZnzlk1XvdvUeBnXmlld', // Domi (female, strong)
-  shimmer: 'MF3mGyEYCl7XYWbV9V6O', // Elli (female)
-  sage: '21m00Tcm4TlvDq8ikWAM', // Rachel (calm)
-  alloy: '21m00Tcm4TlvDq8ikWAM', // Rachel (calm)
-  marin: '21m00Tcm4TlvDq8ikWAM', // Rachel (default)
+  alloy: 'SAz9YHcvj6GT2YYXdXww', // River (neutral)
+  ash: 'cjVigY5qzO86Huf0OWal', // Eric (male)
+  ballad: 'TX3LPaxmHKxFdv7VOQHJ', // Liam (male)
+  coral: 'cgSgspJ2msm6clMCkdW9', // Jessica (female)
+  echo: 'CwhRBWXzGAHq8TQ4Fs17', // Roger (male)
+  fable: 'JBFqnCBsd6RMkjVDRZzb', // George (male)
+  nova: '9BWtsMINqrJLrRacOk9x', // Aria (female)
+  onyx: 'nPczCjzI2devNBz1zQrb', // Brian (deep male)
+  sage: 'XrExE9yKIg1WjnnlVkGX', // Matilda (female)
+  shimmer: 'FGY2WhTYpPnrIDTdsKH5', // Laura (female)
+  verse: 'iP95p4xoKVk53GoZ742B', // Chris (male)
+  marin: 'SAz9YHcvj6GT2YYXdXww', // River (neutral default)
+  cedar: 'pqHfZKP75CvOlQylNhV4', // Bill (older male)
 }
 
 let elevenVoiceMap = defaultElevenVoiceMap
@@ -58,12 +58,12 @@ try {
   // Ignore a malformed override and fall back to the defaults.
 }
 
-function elevenVoiceId(voice) {
+function mapVoiceToEleven(voice) {
   return (
     elevenVoiceMap[voice] ||
     process.env.ELEVENLABS_DEFAULT_VOICE_ID ||
     elevenVoiceMap.marin ||
-    '21m00Tcm4TlvDq8ikWAM'
+    'nPczCjzI2devNBz1zQrb'
   )
 }
 
@@ -117,10 +117,10 @@ function elevenKey() {
   )
 }
 
-async function synthElevenLabs({ text, voice, speaker }) {
+async function synthElevenLabs({ text, voice, speaker, elevenVoiceId }) {
   const apiKey = elevenKey()
   if (!apiKey) return null
-  const voiceId = elevenVoiceId(voice)
+  const voiceId = elevenVoiceId || mapVoiceToEleven(voice)
   const model = process.env.ELEVENLABS_MODEL || 'eleven_turbo_v2_5'
   const response = await fetch(
     `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`,
@@ -148,7 +148,7 @@ export default async function handler(req, res) {
     return
   }
 
-  const { text, voice, style, speaker } = req.body || {}
+  const { text, voice, style, speaker, elevenVoiceId } = req.body || {}
   if (!text || typeof text !== 'string') {
     res.status(400).json({ error: 'Missing text' })
     return
@@ -159,7 +159,7 @@ export default async function handler(req, res) {
   try {
     const audio =
       provider === 'elevenlabs' || provider === '11labs'
-        ? await synthElevenLabs({ text, voice, speaker })
+        ? await synthElevenLabs({ text, voice, speaker, elevenVoiceId })
         : await synthOpenAI({ text, voice, style, speaker })
 
     if (!audio) {
