@@ -155,6 +155,21 @@ function spaceCallLetters(text: string, tokens: string[]) {
   return out
 }
 
+// Respell place names the TTS voice gets wrong. These are the local pronunciations
+// (the Connecticut "Thames" rhymes with "names," and Norwich keeps its hard "w"),
+// applied wherever the word appears — script, backstory, or the live news feed.
+const PRONUNCIATION_FIXES: [RegExp, string][] = [
+  [/\bThaymes\b/gi, 'Thaymz'],
+  [/\bThames\b/gi, 'Thaymz'],
+  [/\bNorwich\b/gi, 'Norwitch'],
+]
+
+function fixPronunciation(text: string) {
+  let out = text
+  for (const [pattern, replacement] of PRONUNCIATION_FIXES) out = out.replace(pattern, replacement)
+  return out
+}
+
 function trackBrief(track?: Track) {
   if (!track) return null
   return {
@@ -1330,7 +1345,9 @@ export function useStation(
               text:
                 segment.speaker === 'spot'
                   ? segment.text
-                  : spaceCallLetters(softenVocatives(segment.text, hostNames), callLetters),
+                  : fixPronunciation(
+                      spaceCallLetters(softenVocatives(segment.text, hostNames), callLetters),
+                    ),
               voice,
               speaker: segment.speaker,
               style,
