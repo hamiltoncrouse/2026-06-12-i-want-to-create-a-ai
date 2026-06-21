@@ -34,6 +34,9 @@ const silentAudioUrl =
 // talk-up, then swells to full volume when the voice ends.
 const DUCK_LEVEL = 0.25
 const SWELL_MS = 1500
+// In lock mode, every Nth song gets a longer, song-aware break instead of a
+// quick generic liner.
+const BG_CUSTOM_EVERY = 3
 const TALKUP_OVERLAP_S = 5
 // Approximate spoken pace used to time the overlap when no voiced audio exists.
 const SPOKEN_WORDS_PER_SECOND = 2.6
@@ -249,6 +252,13 @@ export function useStation(
   // one of these between songs instead. Keyed so we only regenerate per DJ.
   const bgLinersRef = useRef<string[]>([])
   const bgLinersKeyRef = useRef<string>('')
+  // Every few songs in lock mode, play a longer break that actually talks about
+  // the music. We pre-build it (script + voice -> a single blob) during the song
+  // so it's ready to play through the song element when the track ends.
+  const bgSongsRef = useRef(0)
+  const bgCustomDueRef = useRef(false)
+  const bgBreakRef = useRef<string | null>(null)
+  const bgGenRef = useRef(false)
   const sfxManifestRef = useRef<Record<string, string[]> | null>(null)
   const sfxRuntimeCacheRef = useRef<Map<string, Promise<string | null>>>(new Map())
   const sfxLimiterRef = useRef<DynamicsCompressorNode | null>(null)
@@ -1087,6 +1097,61 @@ export function useStation(
     bgLinersRef.current = urls.filter((url): url is string => Boolean(url))
   }, [])
 
+  // Pre-build one longer, song-aware break for lock mode: ask the writer for a
+  // real song-talk script about the track that just played and what's next,
+  // voice it as a single DJ take, and stash the blob to play when the song ends.
+  const prepareBackgroundBreak = useCallback(async (prevIndex: number, nextIndex: number) => {
+    if (bgGenRef.current) return
+    bgGenRef.current = true
+    try {
+      const activeDj = djRef.current
+      const previousTrack = tracksRef.current[prevIndex]
+      const nextTrack = tracksRef.current[nextIndex]
+      const breakResponse = await fetch('/api/dj-break', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dj: activeDj,
+          context: contextRef.current,
+          kind: 'songTalk',
+          previousTrack: trackBrief(previousTrack),
+          nextTrack: trackBrief(nextTrack),
+          recentScripts: recentScriptsRef.current,
+          showNotes: showNotesRef.current,
+        }),
+      })
+      const plan = (await breakResponse.json()) as BreakPlan
+      // Background playback is single-voice through the song element, so flatten
+      // any segments into one DJ take.
+      const script =
+        (plan.segments?.length
+          ? plan.segments.map((segment) => segment.text).filter(Boolean).join(' ')
+          : plan.script) || ''
+      if (!script.trim()) return
+      recentScriptsRef.current = [...recentScriptsRef.current, script].slice(-3)
+      const tokens = callLetterTokens(activeDj)
+      const voiceResponse = await fetch('/api/voice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: spaceCallLetters(fixPronunciation(softenVocatives(script, [activeDj.name])), tokens),
+          voice: activeDj.voice,
+          speaker: 'dj',
+          style: activeDj.style,
+          elevenVoiceId: activeDj.elevenVoice,
+        }),
+      })
+      if (voiceResponse.ok && voiceResponse.headers.get('content-type')?.includes('audio')) {
+        if (bgBreakRef.current) URL.revokeObjectURL(bgBreakRef.current)
+        bgBreakRef.current = URL.createObjectURL(await voiceResponse.blob())
+      }
+    } catch {
+      // No customized break this round; we'll fall back to a quick liner.
+    } finally {
+      bgGenRef.current = false
+    }
+  }, [])
+
   const probeTrack = useCallback((track: Track) => {
     if (goodTracksRef.current.has(track.id)) return Promise.resolve(true)
     if (badTracksRef.current.has(track.id)) return Promise.resolve(false)
@@ -1592,6 +1657,18 @@ export function useStation(
         ].slice(0, 8)
       }
       updateMediaSession(track)
+      // In lock mode, pre-build a longer song-aware break every few songs so a
+      // customized take is ready to air when this track ends.
+      if (document.hidden) {
+        bgSongsRef.current += 1
+        if (bgSongsRef.current % BG_CUSTOM_EVERY === 0) {
+          bgCustomDueRef.current = true
+          const len = Math.max(1, tracksRef.current.length)
+          void prepareBackgroundBreak(index, (index + 1) % len)
+        } else {
+          bgCustomDueRef.current = false
+        }
+      }
       audio.play().catch(() => {
         setStatus('Tap play to enable audio')
       })
@@ -1601,7 +1678,7 @@ export function useStation(
         // Optional hint for lock-screen controls.
       }
     },
-    [applyVolumes, getSongAudio, updateMediaSession],
+    [applyVolumes, getSongAudio, prepareBackgroundBreak, updateMediaSession],
   )
 
   const segueToSong = useCallback(
@@ -1618,17 +1695,18 @@ export function useStation(
     [beginSong, prepareNext],
   )
 
-  // Background bridge: play a pre-recorded DJ liner through the (already
-  // unlocked, non-Web-Audio) song element, then roll into the next song. This
-  // is what runs in place of a live break while the screen is locked.
+  // Background bridge: play a clip (a quick generic liner, or a longer
+  // pre-built song-aware break) through the already-unlocked, non-Web-Audio
+  // song element, then roll into the next song. This is what runs in place of a
+  // live break while the screen is locked.
   const playBackgroundLiner = useCallback(
-    (index: number, count: number) => {
+    (index: number, count: number, clip?: string) => {
       const liners = bgLinersRef.current
-      if (!liners.length) {
+      const url = clip || (liners.length ? liners[Math.floor(Math.random() * liners.length)] : '')
+      if (!url) {
         segueToSong(index, count)
         return
       }
-      const url = liners[Math.floor(Math.random() * liners.length)]
       const audio = getSongAudio()
       const goNext = () => {
         if (stopRef.current) return
@@ -1779,10 +1857,17 @@ export function useStation(
       // counter keeps climbing) as soon as the app is in the foreground again.
       if (songsSinceBreakRef.current >= breakEveryRef.current) {
         if (document.hidden) {
-          // Locked/backgrounded: a live break would be silent, so slip in a
-          // pre-recorded liner if we have one, otherwise just keep the music
-          // rolling. A full break resumes once we're back in the foreground.
-          playBackgroundLiner(nextIndex, nextCount)
+          // Locked/backgrounded: a live break would be silent. Every few songs
+          // air the longer, song-aware break we pre-built during the track;
+          // otherwise slip in a quick liner. A full break resumes in foreground.
+          if (bgCustomDueRef.current && bgBreakRef.current) {
+            bgCustomDueRef.current = false
+            const clip = bgBreakRef.current
+            bgBreakRef.current = null
+            playBackgroundLiner(nextIndex, nextCount, clip)
+          } else {
+            playBackgroundLiner(nextIndex, nextCount)
+          }
         } else {
           chainRef.current(nextIndex, nextCount, fromIndex)
         }
@@ -1939,6 +2024,8 @@ export function useStation(
     breakSeqRef.current = 0
     setBreakSeq(0)
     songsSinceBreakRef.current = 0
+    bgSongsRef.current = 0
+    bgCustomDueRef.current = false
     recentScriptsRef.current = []
     showNotesRef.current = []
     passPlayedRef.current.clear()
