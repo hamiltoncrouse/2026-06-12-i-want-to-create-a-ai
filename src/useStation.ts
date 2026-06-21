@@ -1693,7 +1693,12 @@ export function useStation(
         nextIndex = await findPlayableIndex((fromIndex + 1) % Math.max(1, tracksRef.current.length))
       }
       if (stopRef.current) return
-      if (songsSinceBreakRef.current >= breakEveryRef.current) {
+      // DJ breaks play through the Web Audio graph, which mobile browsers
+      // suspend while the tab is backgrounded or the screen is locked — a break
+      // there would go silent and stall the show. So while hidden, skip the
+      // break and keep songs flowing back to back; the break resumes (the
+      // counter keeps climbing) as soon as the app is in the foreground again.
+      if (songsSinceBreakRef.current >= breakEveryRef.current && !document.hidden) {
         chainRef.current(nextIndex, nextCount, fromIndex)
       } else {
         songsSinceBreakRef.current += 1
