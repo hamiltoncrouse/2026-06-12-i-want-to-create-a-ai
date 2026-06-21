@@ -37,6 +37,7 @@ import {
   defaultDjId,
   defaultFolderUrl,
   djPalette,
+  elevenVoiceLibrary,
   emptyContext,
   emptySteering,
   formatTime,
@@ -1429,6 +1430,28 @@ function App() {
                         {voice}
                       </option>
                     ))}
+                  </select>
+                </label>
+                <label>
+                  <span>ElevenLabs voice</span>
+                  <select
+                    value={draftDj.elevenVoice || ''}
+                    onChange={(event) =>
+                      setDraftDj({ ...draftDj, elevenVoice: event.target.value || undefined })
+                    }
+                  >
+                    <option value="">Default (match voice name)</option>
+                    {elevenVoiceLibrary.map((voice) => (
+                      <option key={voice.id} value={voice.id}>
+                        {voice.name}
+                      </option>
+                    ))}
+                    {draftDj.elevenVoice &&
+                      !elevenVoiceLibrary.some((voice) => voice.id === draftDj.elevenVoice) && (
+                        <option value={draftDj.elevenVoice}>
+                          Current ({draftDj.elevenVoice.slice(0, 8)}…)
+                        </option>
+                      )}
                   </select>
                 </label>
                 <div className="voicePreview wideField">

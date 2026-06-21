@@ -405,6 +405,12 @@ export const voiceOptions: VoiceName[] = [
   'echo',
 ]
 
+// Named ElevenLabs voices you can assign to any DJ from the editor. Add more
+// here as you find voices you like in your ElevenLabs account.
+export const elevenVoiceLibrary: { name: string; id: string }[] = [
+  { name: 'jazzman', id: 'MEiBY6lrwud0dREUa5FQ' },
+]
+
 export const djPalette = [
   '#f45d48',
   '#e0b13b',
