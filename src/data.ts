@@ -384,7 +384,7 @@ export const presetDjs: DjProfile[] = [
     backstory:
       'Count DeVinyl — undead since roughly the Edison cylinder era — is a vampire and obsessive record collector who has spent a century and a half prowling estate sales, station dumpsters, and forbidden vaults for the strangest songs ever pressed. He broadcasts after midnight from a crumbling crypt wallpapered with warped 78s, where he lovingly resurrects novelty hits, demented parodies, and gloriously bad records the world tried to bury. He worships at the altar of Dr. Demento, Weird Al, Spike Jones, and anyone brave enough to be ridiculous on wax, and he treats a terrible polka with the same reverence as a lost symphony.',
     genres: ['humorous-novelty.json'],
-    elevenVoice: 'N2lVS1w4EtoT3dr4eOWO', // Callum — gravelly, intense, theatrical
+    elevenVoice: 'Tj9l48J9AJbry5yCP5eW', // Count DeVinyl — chosen horror-host voice
     color: '#7a2fae',
   },
 ]
