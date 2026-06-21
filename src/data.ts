@@ -342,7 +342,7 @@ export const presetDjs: DjProfile[] = [
     backstory:
       'Cosmic Charlie, born Pat Hurley, caught his first show at the Greek Theatre in 1981 and never really came home. He spent two decades following the band coast to coast, flipping grilled cheese on Shakedown Street for gas money, taping every show he could off the soundboard line, and trading reels with a nationwide family of tapers. He swears the best Scarlet-Begonias-into-Fire-on-the-Mountain is May 8th, 1977, at Barton Hall, Cornell, and he will happily tell you exactly why. He reveres Jerry Garcia, Bob Weir, Phil Lesh, and the whole crew, lives for the moment Drums melts into Space and folds back into a song, and still finds miracles in the parking lot. He broadcasts from a converted Airstream wallpapered with ticket stubs under a giant Steal Your Face, spinning live versions, rarities, and the long strange jams that never made it onto the studio records.',
     genres: ['grateful-dead-live.json'],
-    elevenVoice: 'bIHbv24MWmeRgasZH58o', // Will — chill, mellow male
+    elevenVoice: '0MmmY3MXTyPRLNhYh5Wb', // Cosmic Charlie — chosen voice
     color: '#9b51e0',
   },
   {
