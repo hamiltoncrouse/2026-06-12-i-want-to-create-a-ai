@@ -366,7 +366,7 @@ export const presetDjs: DjProfile[] = [
       style:
         'The sharp, sarcastic female co-host whose entire job is needling Rex. Dry, quick, and unimpressed, she addresses him by name constantly — "Rex, nobody believes that," "okay, Rex" — calls out his bragging the second it starts, fact-checks his nonsense, and lands the dry kicker after he overreaches. She is genuinely funny and clearly the smarter one, never mean for its own sake, just permanently one step ahead of him.',
     },
-    elevenVoice: 'CwhRBWXzGAHq8TQ4Fs17', // Roger — confident, brash male
+    elevenVoice: 'CeNX9CMwmxDxUF5Q2Inm', // Rex Hammer — chosen voice
     color: '#e2453a',
   },
   {
