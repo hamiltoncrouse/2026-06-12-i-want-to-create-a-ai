@@ -61,6 +61,7 @@ import type {
 const genreLabelOverrides: Record<string, string> = {
   'punk-newwave': 'Punk / New Wave',
   standards: 'Great American Songbook',
+  'humorous-novelty': 'Novelty',
 }
 function prettyGenre(file: string) {
   const base = file.replace(/\.json$/i, '')
@@ -84,6 +85,7 @@ const bundledGenreFiles = [
   'oldies.json',
   'musicals.json',
   'standards.json',
+  'humorous-novelty.json',
   'grateful-dead-live.json',
 ]
 
