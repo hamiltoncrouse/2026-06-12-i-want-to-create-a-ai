@@ -244,6 +244,11 @@ export function useStation(
   const songRef = useRef<HTMLAudioElement | null>(null)
   const breakRef = useRef<HTMLAudioElement | null>(null)
   const sfxRef = useRef<HTMLAudioElement | null>(null)
+  // Pre-recorded DJ liners (the host's own voice) used as background bridges:
+  // while the screen is locked the live Web Audio break can't play, so we slip
+  // one of these between songs instead. Keyed so we only regenerate per DJ.
+  const bgLinersRef = useRef<string[]>([])
+  const bgLinersKeyRef = useRef<string>('')
   const sfxManifestRef = useRef<Record<string, string[]> | null>(null)
   const sfxRuntimeCacheRef = useRef<Map<string, Promise<string | null>>>(new Map())
   const sfxLimiterRef = useRef<DynamicsCompressorNode | null>(null)
@@ -1039,6 +1044,49 @@ export function useStation(
     return promise
   }, [])
 
+  // Pre-record a handful of short, generic liners in the current DJ's voice so
+  // there's something to play between songs while the screen is locked (when
+  // live, Web-Audio-processed breaks can't run). Generated once per DJ.
+  const prepareBackgroundLiners = useCallback(async () => {
+    const activeDj = djRef.current
+    const key = `${activeDj.id}:${activeDj.voice}:${activeDj.elevenVoice || ''}`
+    if (bgLinersKeyRef.current === key && bgLinersRef.current.length) return
+    bgLinersKeyRef.current = key
+    const station = activeDj.callsign || activeDj.stationName || 'Airbreak'
+    const lines = [
+      `You're locked into ${station}. Stay right here.`,
+      `${activeDj.name}, keeping the music going.`,
+      `More music, coming up on ${station}.`,
+      `You're in the mix on ${station}.`,
+    ]
+    const tokens = callLetterTokens(activeDj)
+    const urls = await Promise.all(
+      lines.map(async (line) => {
+        try {
+          const response = await fetch('/api/voice', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              text: spaceCallLetters(fixPronunciation(line), tokens),
+              voice: activeDj.voice,
+              speaker: 'dj',
+              style: activeDj.style,
+              elevenVoiceId: activeDj.elevenVoice,
+            }),
+          })
+          if (response.ok && response.headers.get('content-type')?.includes('audio')) {
+            return URL.createObjectURL(await response.blob())
+          }
+        } catch {
+          // Skip a liner that fails to generate.
+        }
+        return null
+      }),
+    )
+    if (bgLinersKeyRef.current !== key) return
+    bgLinersRef.current = urls.filter((url): url is string => Boolean(url))
+  }, [])
+
   const probeTrack = useCallback((track: Track) => {
     if (goodTracksRef.current.has(track.id)) return Promise.resolve(true)
     if (badTracksRef.current.has(track.id)) return Promise.resolve(false)
@@ -1570,6 +1618,37 @@ export function useStation(
     [beginSong, prepareNext],
   )
 
+  // Background bridge: play a pre-recorded DJ liner through the (already
+  // unlocked, non-Web-Audio) song element, then roll into the next song. This
+  // is what runs in place of a live break while the screen is locked.
+  const playBackgroundLiner = useCallback(
+    (index: number, count: number) => {
+      const liners = bgLinersRef.current
+      if (!liners.length) {
+        segueToSong(index, count)
+        return
+      }
+      const url = liners[Math.floor(Math.random() * liners.length)]
+      const audio = getSongAudio()
+      const goNext = () => {
+        if (stopRef.current) return
+        songsSinceBreakRef.current = 1
+        segueToSong(index, count)
+      }
+      audio.ontimeupdate = null
+      audio.onended = goNext
+      audio.onerror = goNext
+      audio.loop = false
+      duckRef.current = 1
+      applyVolumes()
+      audio.src = url
+      audio.load()
+      setStatus('On air')
+      audio.play().catch(goNext)
+    },
+    [applyVolumes, getSongAudio, segueToSong],
+  )
+
   const playBreakThenSong = useCallback(
     async (index: number, count: number, previousIndex?: number) => {
       const activeTracks = tracksRef.current
@@ -1698,14 +1777,21 @@ export function useStation(
       // there would go silent and stall the show. So while hidden, skip the
       // break and keep songs flowing back to back; the break resumes (the
       // counter keeps climbing) as soon as the app is in the foreground again.
-      if (songsSinceBreakRef.current >= breakEveryRef.current && !document.hidden) {
-        chainRef.current(nextIndex, nextCount, fromIndex)
+      if (songsSinceBreakRef.current >= breakEveryRef.current) {
+        if (document.hidden) {
+          // Locked/backgrounded: a live break would be silent, so slip in a
+          // pre-recorded liner if we have one, otherwise just keep the music
+          // rolling. A full break resumes once we're back in the foreground.
+          playBackgroundLiner(nextIndex, nextCount)
+        } else {
+          chainRef.current(nextIndex, nextCount, fromIndex)
+        }
       } else {
         songsSinceBreakRef.current += 1
         segueToSong(nextIndex, nextCount)
       }
     },
-    [findPlayableIndex, segueToSong],
+    [findPlayableIndex, playBackgroundLiner, segueToSong],
   )
 
   useEffect(() => {
@@ -1792,6 +1878,13 @@ export function useStation(
     requestStandbyLiner()
   }, [mode, dj.id, requestStandbyLiner])
 
+  // Refresh the background liners in the new DJ's voice when the host changes
+  // mid-show (self-dedupes, so song/break toggles don't trigger regeneration).
+  useEffect(() => {
+    if (mode === 'idle') return
+    void prepareBackgroundLiners()
+  }, [mode, dj.id, dj.voice, dj.elevenVoice, prepareBackgroundLiners])
+
   // Warm the opening break (script + voice) while the station is idle so
   // pressing Start goes straight to air with no dead time. Re-warms when the
   // DJ, library, or station context changes; the cache dedupes repeats.
@@ -1813,6 +1906,9 @@ export function useStation(
     }
     ensureAudioGraph()
     requestStandbyLiner()
+    // Pre-record the DJ's background liners now (foreground) so they're ready
+    // to bridge between songs once the screen is locked.
+    void prepareBackgroundLiners()
     // Load the transition-bed manifest so the first produced break is instant.
     void loadSfxManifest()
     // Unlock the SFX element inside the user gesture for mobile autoplay.
@@ -1860,6 +1956,7 @@ export function useStation(
     getSongAudio,
     loadSfxManifest,
     playBreakThenSong,
+    prepareBackgroundLiners,
     requestStandbyLiner,
   ])
 
