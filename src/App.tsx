@@ -58,7 +58,10 @@ import type {
 } from './types'
 
 // Pretty display names for genre manifest files.
-const genreLabelOverrides: Record<string, string> = { 'punk-newwave': 'Punk / New Wave' }
+const genreLabelOverrides: Record<string, string> = {
+  'punk-newwave': 'Punk / New Wave',
+  standards: 'Great American Songbook',
+}
 function prettyGenre(file: string) {
   const base = file.replace(/\.json$/i, '')
   if (genreLabelOverrides[base]) return genreLabelOverrides[base]
