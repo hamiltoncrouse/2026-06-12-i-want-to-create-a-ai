@@ -661,6 +661,93 @@ input[type='range']:disabled::-webkit-slider-thumb {
   gap: 10px;
 }
 
+/* ---------- Playlists (On Air) ---------- */
+
+.playlistPanel {
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
+  overflow: hidden;
+}
+
+.playlistToggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 13px 15px;
+  background: transparent;
+  text-align: left;
+}
+
+.playlistToggle .upNextLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.playlistActiveTag {
+  margin-left: auto;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--dj);
+  color: #0c0d10;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.playlistChevron {
+  margin-left: 8px;
+  color: var(--muted);
+  transition: transform 0.2s ease;
+}
+
+.playlistChevron.open {
+  transform: rotate(180deg);
+}
+
+/* When a playlist is active, push the chevron back to the right edge. */
+.playlistActiveTag + .playlistChevron {
+  margin-left: 8px;
+}
+
+.playlistToggle:not(:has(.playlistActiveTag)) .playlistChevron {
+  margin-left: auto;
+}
+
+.playlistOptions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 15px 14px;
+}
+
+.playlistChip {
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--dj) 7%, transparent);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.playlistChip:hover {
+  border-color: color-mix(in srgb, var(--dj) 45%, var(--line));
+}
+
+.playlistChip.active {
+  color: #0c0d10;
+  background: var(--dj);
+  border-color: var(--dj);
+}
+
+.playlistChip:disabled {
+  opacity: 0.55;
+}
+
 /* ---------- Artist filter (Library) ---------- */
 
 .artistPanel {
