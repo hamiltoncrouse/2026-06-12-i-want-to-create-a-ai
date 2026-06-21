@@ -80,6 +80,7 @@ const bundledGenreFiles = [
   'disco.json',
   'oldies.json',
   'musicals.json',
+  'standards.json',
   'grateful-dead-live.json',
 ]
 
