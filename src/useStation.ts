@@ -960,11 +960,29 @@ export function useStation(
         voiced.push({ speaker: 'dj', text: plan.script, audioUrl: plan.audioUrl })
       }
 
+      // Occasionally open a talking break with a produced station jingle (a
+      // sung WICH ID, etc.) right before the DJ speaks. Plays clean, and stands
+      // in for the usual opening sweep when it fires.
+      const jingles = djRef.current.jingles
+      let playedJingle = false
+      if (
+        jingles?.length &&
+        plan.kind !== 'bumper' &&
+        plan.kind !== 'commercial' &&
+        voiced.length &&
+        Math.random() < 0.35
+      ) {
+        setVoiceEffect('spot')
+        await playAudioUrl(jingles[Math.floor(Math.random() * jingles.length)])
+        if (stopRef.current) return
+        playedJingle = true
+      }
+
       // Open the transition with a produced sound effect, whatever voice
       // follows. Prefer a pre-generated ElevenLabs bed; if none is available,
       // bumpers still get the synth stinger so the imaging never falls flat.
       const sfxCategory = breakSfxCategory[plan.kind]
-      const playedSfx = sfxCategory ? await playSfx(sfxCategory) : false
+      const playedSfx = !playedJingle && sfxCategory ? await playSfx(sfxCategory) : false
       if (!playedSfx && plan.kind === 'bumper') {
         playStinger()
         await new Promise((resolve) => window.setTimeout(resolve, 260))

@@ -246,6 +246,12 @@ export const presetDjs: DjProfile[] = [
     backstory:
       'Johnny London, born Jean Gildart, was the #1 morning drive personality in Eastern Connecticut through the 1970s, 1980s, and 1990s. He helped define WICH 1310 AM Personality Radio in Norwich, Connecticut: a 5,000-watt community station with roots back to September 1946, originally WNOC. Johnny is remembered for his 1973 fifty-four-hour continuous record-spinning endurance marathon for local youth football, his crusade to help save the historic Wauregan Hotel, and a 1997 radiothon that kept a historic Abraham Lincoln banner in Norwich. He knows Tower Hill Road, the three-tower array, Hall Communications, and the old-school WICH lineup, including Stu Bryer and Potpourri. He loves talking about Blue Ribbon Pontiac at 400 West Thaymes Street and owner Joe Goldberg, and he brings up the Rose Arts Festival like a hometown ritual: music acts all over town, the Pancake Breakfast, and the Rotary Club volunteers making it happen.',
     elevenVoice: 'mKoqwDP2laxTdq1gEgU6', // Johnny London — chosen voice
+    jingles: [
+      '/jingles/wich-johnny.mp3',
+      '/jingles/wich-listening.mp3',
+      '/jingles/wich-music-station.mp3',
+      '/jingles/wich-1310.mp3',
+    ],
     color: '#f45d48',
   },
   {

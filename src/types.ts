@@ -64,6 +64,9 @@ export type DjProfile = {
   // ElevenLabs voice ID for this DJ (used when VOICE_PROVIDER=elevenlabs).
   // Falls back to a name-based mapping when unset.
   elevenVoice?: string
+  // Produced station jingles that occasionally play right before this DJ's
+  // breaks (URLs to audio files).
+  jingles?: string[]
   color: string
 }
 
