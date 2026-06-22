@@ -5,6 +5,16 @@
 
 const MAX_PROMPT = 300
 
+function elevenKey() {
+  return (
+    process.env.ELEVENLABS_API_KEY ||
+    process.env.ElevenKey ||
+    process.env.ELEVEN_API_KEY ||
+    process.env.ELEVENLABS_KEY ||
+    ''
+  )
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' })
@@ -17,7 +27,8 @@ export default async function handler(req, res) {
     return
   }
 
-  if (!process.env.ELEVENLABS_API_KEY) {
+  const apiKey = elevenKey()
+  if (!apiKey) {
     res.status(204).end()
     return
   }
@@ -36,7 +47,7 @@ export default async function handler(req, res) {
     const response = await fetch('https://api.elevenlabs.io/v1/sound-generation', {
       method: 'POST',
       headers: {
-        'xi-api-key': process.env.ELEVENLABS_API_KEY,
+        'xi-api-key': apiKey,
         'Content-Type': 'application/json',
         Accept: 'audio/mpeg',
       },
