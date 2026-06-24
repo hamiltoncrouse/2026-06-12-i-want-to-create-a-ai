@@ -134,6 +134,15 @@ async function synthOpenAI({ text, voice, style, speaker }) {
   return Buffer.from(await response.arrayBuffer())
 }
 
+function warnProviderFailure(provider, response, detail = '') {
+  const safeDetail = String(detail || '').replace(/\s+/g, ' ').slice(0, 500)
+  console.warn(
+    `${provider} voice synthesis failed: ${response.status} ${response.statusText}${
+      safeDetail ? ` - ${safeDetail}` : ''
+    }`,
+  )
+}
+
 // Accept a few common names for the ElevenLabs key so it works regardless of
 // what the env var was called when it was added.
 function elevenKey() {
@@ -170,7 +179,11 @@ async function synthElevenLabs({ text, voice, speaker, elevenVoiceId }) {
       }),
     },
   )
-  if (!response.ok) return null
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '')
+    warnProviderFailure('ElevenLabs', response, detail)
+    return null
+  }
   return Buffer.from(await response.arrayBuffer())
 }
 
@@ -189,10 +202,11 @@ export default async function handler(req, res) {
   const provider = (process.env.VOICE_PROVIDER || 'openai').toLowerCase()
 
   try {
-    const audio =
-      provider === 'elevenlabs' || provider === '11labs'
-        ? await synthElevenLabs({ text, voice, speaker, elevenVoiceId })
-        : await synthOpenAI({ text, voice, style, speaker })
+    const wantsElevenLabs = provider === 'elevenlabs' || provider === '11labs'
+    const audio = wantsElevenLabs
+      ? (await synthElevenLabs({ text, voice, speaker, elevenVoiceId })) ||
+        (await synthOpenAI({ text, voice, style, speaker }))
+      : await synthOpenAI({ text, voice, style, speaker })
 
     if (!audio) {
       res.status(204).end()
