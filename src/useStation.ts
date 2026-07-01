@@ -426,6 +426,17 @@ export function useStation(
     [applyVolumes],
   )
 
+  // Pull the music way down while the listener records a call, so they can
+  // talk over it and the mic isn't fighting the speakers. Restores only when
+  // a song is playing (a break manages its own ducking).
+  const setCallDucking = useCallback(
+    (active: boolean) => {
+      if (active) rampDuck(0.08, 300)
+      else if (phaseRef.current === 'song') rampDuck(1, 700)
+    },
+    [rampDuck],
+  )
+
   const ensureAudioGraph = useCallback(() => {
     // Route the voice element through Web Audio: a dry path, a phone-line path
     // (band-passed with a presence peak) for callers and remote reporters, and
@@ -1422,7 +1433,15 @@ export function useStation(
             nextTrack: trackBrief(nextTrack),
             queue: activeTracks.slice(index, index + 6).map(trackBrief).filter(Boolean),
             listenerRequests: queuedRequests.map(({ id, text }) => ({ id, text })),
-            listenerCall: queuedCall ? { text: queuedCall.text } : undefined,
+            listenerCall: queuedCall
+              ? {
+                  text: queuedCall.text,
+                  // Only promise the song when it is genuinely the next track.
+                  granted: Boolean(
+                    queuedCall.cuedTrackId && nextTrack?.id === queuedCall.cuedTrackId,
+                  ),
+                }
+              : undefined,
             steering: steeringRef.current,
             usageTip,
             recentScripts: recentScriptsRef.current,
@@ -2263,6 +2282,7 @@ export function useStation(
   return {
     tracks,
     cueTrack,
+    setCallDucking,
     setLibrary,
     currentIndex,
     currentTrack: tracks[currentIndex] as Track | undefined,

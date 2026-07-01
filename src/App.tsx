@@ -177,9 +177,25 @@ function blobToBase64(blob: Blob) {
   })
 }
 
-// Find the track a request is asking for. Conservative on purpose: only match
-// when the title (or title + artist) clearly appears, so casual chatter never
-// hijacks the queue.
+// Words too generic to identify an artist on their own.
+const artistStopWords = new Set([
+  'the',
+  'and',
+  'his',
+  'her',
+  'with',
+  'band',
+  'group',
+  'orchestra',
+  'quartet',
+  'trio',
+  'little',
+  'big',
+])
+
+// Find the track a request is asking for. A clear title wins; an artist alone
+// is enough ("play some Zeppelin" cues a Led Zeppelin track); casual chatter
+// still never hijacks the queue.
 function matchTrackForRequest(text: string, tracks: Track[]) {
   const norm = (value: string) =>
     value
@@ -197,19 +213,32 @@ function matchTrackForRequest(text: string, tracks: Track[]) {
     if (title.length < 3) continue
     const artist = norm(track.artist || '')
     let score = 0
+
     if (asked.includes(title)) {
       score += 100
     } else {
       const titleWords = title.split(' ').filter((word) => word.length > 2)
-      const hits = titleWords.filter((word) => words.has(word)).length
-      if (titleWords.length && hits === titleWords.length) score += 60
-      else score += hits * 8
+      const hits = titleWords.filter((word) => words.has(word))
+      if (titleWords.length && hits.length === titleWords.length) score += 70
+      else if (hits.length >= 2) score += 30 + hits.length * 8
+      else if (hits.length === 1 && hits[0].length >= 6) score += 24
+      else score += hits.length * 8
     }
-    if (artist && asked.includes(artist)) score += 40
-    else if (artist) {
-      const artistWords = artist.split(' ').filter((word) => word.length > 2)
-      score += artistWords.filter((word) => words.has(word)).length * 6
+
+    if (artist) {
+      if (asked.includes(artist)) {
+        score += 45
+      } else {
+        const artistWords = artist
+          .split(' ')
+          .filter((word) => word.length > 2 && !artistStopWords.has(word))
+        const hits = artistWords.filter((word) => words.has(word))
+        if (hits.length >= 2) score += 42
+        else if (hits.length === 1 && hits[0].length >= 5) score += 40
+        else score += hits.length * 6
+      }
     }
+
     if (score > bestScore) {
       best = track
       bestScore = score
@@ -367,6 +396,7 @@ function App() {
   const {
     tracks,
     cueTrack,
+    setCallDucking,
     setLibrary,
     currentIndex,
     currentTrack,
@@ -1115,7 +1145,7 @@ function App() {
     }
     // If we can confidently find the song they asked for, cue it next.
     const match = matchTrackForRequest(text, tracks)
-    if (match) cueTrack(match.id)
+    if (match && cueTrack(match.id)) request.cuedTrackId = match.id
     setListenerRequests((requests) => [...requests, request].slice(-8))
     setRequestDraft('')
   }, [cueTrack, requestDraft, tracks])
@@ -1159,10 +1189,10 @@ function App() {
       } catch {
         // The call still airs; the DJ just responds without a transcript.
       }
-      let cued = false
+      let cuedTrackId: string | undefined
       if (text) {
         const match = matchTrackForRequest(text, tracks)
-        if (match) cued = cueTrack(match.id)
+        if (match && cueTrack(match.id)) cuedTrackId = match.id
       }
       const request: ListenerRequest = {
         id: `call-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -1170,6 +1200,7 @@ function App() {
         at: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
         audioUrl,
         source: 'call',
+        cuedTrackId,
       }
       setListenerRequests((requests) => {
         const next = [...requests, request].slice(-8)
@@ -1179,7 +1210,7 @@ function App() {
         return next
       })
       setCallHint(
-        cued
+        cuedTrackId
           ? "You're going on the air — and your song is cued up next."
           : "You're going on the air at the next break.",
       )
@@ -1209,6 +1240,7 @@ function App() {
         stream.getTracks().forEach((track) => track.stop())
         window.clearTimeout(callStopTimerRef.current)
         window.clearInterval(callTickRef.current)
+        setCallDucking(false)
         const type = recorder.mimeType || mime || 'audio/webm'
         const blob = new Blob(callChunksRef.current, { type })
         if (blob.size < 2000) {
@@ -1222,6 +1254,8 @@ function App() {
       }
       mediaRecorderRef.current = recorder
       recorder.start()
+      // Pull the music down so the caller can talk over it.
+      setCallDucking(true)
       feedback('play')
       setCallSeconds(0)
       setCallState('recording')
@@ -1233,7 +1267,7 @@ function App() {
       setCallHint('Microphone unavailable — check your browser permissions.')
       setCallState('idle')
     }
-  }, [callState, finishCall])
+  }, [callState, finishCall, setCallDucking])
 
   const hangUp = useCallback(() => {
     const recorder = mediaRecorderRef.current

@@ -121,6 +121,8 @@ export type ListenerRequest = {
   // A recorded call: the listener's actual voice, played on air as the caller.
   audioUrl?: string
   source?: 'text' | 'call'
+  // The library track this request matched and cued, when we found one.
+  cuedTrackId?: string
 }
 
 export type SessionSteering = {
