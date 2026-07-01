@@ -247,6 +247,11 @@ export function useStation(
   const songRef = useRef<HTMLAudioElement | null>(null)
   const breakRef = useRef<HTMLAudioElement | null>(null)
   const sfxRef = useRef<HTMLAudioElement | null>(null)
+  // A silent loop that runs for the whole on-air session. Phones freeze a
+  // backgrounded page the instant no audio is playing — even the millisecond
+  // gap of a track change can do it — and a frozen page can never restart
+  // itself. This keeps the audio session alive through every transition.
+  const keepAliveRef = useRef<HTMLAudioElement | null>(null)
   // Pre-recorded DJ liners (the host's own voice) used as background bridges:
   // while the screen is locked the live Web Audio break can't play, so we slip
   // one of these between songs instead. Keyed so we only regenerate per DJ.
@@ -1975,6 +1980,8 @@ export function useStation(
       const phase = phaseRef.current
       if (phase !== 'song' && phase !== 'break') return
       audioCtxRef.current?.resume().catch(() => undefined)
+      const keepAlive = keepAliveRef.current
+      if (keepAlive?.src && keepAlive.paused) keepAlive.play().catch(() => undefined)
       if (phase === 'song') {
         const audio = songRef.current
         if (!audio?.src) return
@@ -2009,6 +2016,8 @@ export function useStation(
     const onVisibilityChange = () => {
       if (document.hidden || stopRef.current) return
       audioCtxRef.current?.resume().catch(() => undefined)
+      const keepAlive = keepAliveRef.current
+      if (keepAlive?.src && keepAlive.paused) keepAlive.play().catch(() => undefined)
       const phase = phaseRef.current
       if (phase === 'song') {
         const audio = songRef.current
@@ -2070,6 +2079,15 @@ export function useStation(
     }
     sfxRef.current.src = silentAudioUrl
     sfxRef.current.play().catch(() => undefined)
+    // Session-long silent loop: keeps the page's audio session alive across
+    // track-change gaps so the OS never freezes a backgrounded show.
+    if (!keepAliveRef.current) {
+      keepAliveRef.current = new Audio()
+      keepAliveRef.current.preload = 'auto'
+      keepAliveRef.current.loop = true
+    }
+    keepAliveRef.current.src = silentAudioUrl
+    keepAliveRef.current.play().catch(() => undefined)
     // Prime both elements inside the user gesture so later src swaps autoplay.
     const breakAudio = getBreakAudio()
     breakAudio.loop = true
@@ -2120,6 +2138,7 @@ export function useStation(
     window.speechSynthesis?.cancel()
     breakRef.current?.pause()
     songRef.current?.pause()
+    keepAliveRef.current?.pause()
     setMode('paused')
     setStatus('Paused')
     try {
@@ -2132,6 +2151,7 @@ export function useStation(
   const resume = useCallback(() => {
     stopRef.current = false
     ensureAudioGraph()
+    keepAliveRef.current?.play().catch(() => undefined)
     const audio = songRef.current
     if (phaseRef.current === 'song' && audio?.src) {
       duckRef.current = 1
