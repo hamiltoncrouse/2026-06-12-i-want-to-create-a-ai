@@ -246,9 +246,14 @@ function App() {
   const [cityDraft, setCityDraft] = useState(
     () => localStorage.getItem('ai-dj-station-city') || '',
   )
-  const [citySource, setCitySource] = useState<'dj' | 'listener'>(() =>
-    localStorage.getItem('ai-dj-city-source') === 'listener' ? 'listener' : 'dj',
-  )
+  // First visits default to the listener's own city (auto-detected) so the
+  // first break talks about THEIR weather — the fastest "how did it know
+  // that" moment. A saved choice always wins.
+  const [citySource, setCitySource] = useState<'dj' | 'listener'>(() => {
+    const saved = localStorage.getItem('ai-dj-city-source')
+    if (saved === 'dj' || saved === 'listener') return saved
+    return 'listener'
+  })
   const [breakEvery, setBreakEvery] = useState(() => {
     const saved = Number(localStorage.getItem('ai-dj-break-every'))
     return [1, 2, 3, 5].includes(saved) ? saved : 1
@@ -269,6 +274,9 @@ function App() {
   const [voicePreviewStatus, setVoicePreviewStatus] = useState('')
   const previewAudioRef = useRef<HTMLAudioElement | null>(null)
   const previewAudioUrlRef = useRef<string | null>(null)
+  // Cached voice snippets for the station-card "hear them" buttons.
+  const djPreviewCacheRef = useRef<Map<string, string>>(new Map())
+  const [previewingDjId, setPreviewingDjId] = useState<string | null>(null)
   const djFormRef = useRef<HTMLDivElement | null>(null)
   const importInputRef = useRef<HTMLInputElement | null>(null)
   const [importMessage, setImportMessage] = useState('')
@@ -568,6 +576,45 @@ function App() {
   const selectDj = useCallback((id: string) => {
     feedback('select')
     setSelectedDjId(id)
+  }, [])
+
+  // On the station rail, lead with the general listener DJs; the in-venue
+  // hosts (restaurant mode) sit at the end.
+  const railDjs = [...djs].sort((a, b) => Number(Boolean(a.venue)) - Number(Boolean(b.venue)))
+
+  // Play a short signature line so a first-time listener can hear who a DJ is
+  // before switching. Cached per DJ so repeat taps cost nothing.
+  const previewDj = useCallback(async (dj: DjProfile) => {
+    feedback('select')
+    try {
+      previewAudioRef.current?.pause()
+      let url = djPreviewCacheRef.current.get(dj.id)
+      if (!url) {
+        setPreviewingDjId(dj.id)
+        const station = dj.callsign || dj.stationName || 'Airbreak'
+        const response = await fetch('/api/voice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: `You're listening to ${dj.name} on ${station}. Keep listening.`,
+            voice: dj.voice,
+            speaker: 'dj',
+            style: dj.style,
+            elevenVoiceId: dj.elevenVoice,
+          }),
+        })
+        if (!response.ok || !response.headers.get('content-type')?.includes('audio')) return
+        url = URL.createObjectURL(await response.blob())
+        djPreviewCacheRef.current.set(dj.id, url)
+      }
+      const audio = new Audio(url)
+      previewAudioRef.current = audio
+      await audio.play()
+    } catch {
+      // Preview is best-effort.
+    } finally {
+      setPreviewingDjId(null)
+    }
   }, [])
 
   const loadFolder = useCallback(async () => {
@@ -1129,22 +1176,51 @@ function App() {
               </p>
             </div>
 
-            <div className="djRail" role="group" aria-label="Switch DJ">
-              {djs.map((dj) => (
-                <button
-                  key={dj.id}
-                  type="button"
-                  className={dj.id === selectedDj.id ? 'railDj active' : 'railDj'}
-                  onClick={() => selectDj(dj.id)}
-                  aria-pressed={dj.id === selectedDj.id}
-                  title={dj.name}
-                >
-                  <span className="railAvatar" style={{ background: dj.color }}>
-                    {initials(dj.name)}
-                  </span>
-                  <span className="railName">{dj.name.split(' ')[0]}</span>
-                </button>
-              ))}
+            <div className="railBlock">
+              <span className="upNextLabel railLabel">
+                <Radio size={13} aria-hidden="true" />
+                Change the station
+              </span>
+              <div className="djRail" role="group" aria-label="Switch station">
+                {railDjs.map((dj) => (
+                  <div
+                    key={dj.id}
+                    className={dj.id === selectedDj.id ? 'stationCard active' : 'stationCard'}
+                    style={{ '--dj-card': dj.color } as CSSProperties}
+                  >
+                    <button
+                      className="stationSelect"
+                      type="button"
+                      onClick={() => selectDj(dj.id)}
+                      aria-pressed={dj.id === selectedDj.id}
+                    >
+                      <span className="stationTop">
+                        <span className="railAvatar" style={{ background: dj.color }}>
+                          {initials(dj.name)}
+                        </span>
+                        <span className="stationId">
+                          <strong>{dj.name}</strong>
+                          <span className="stationFreq">{dj.stationName || 'Airbreak'}</span>
+                        </span>
+                      </span>
+                      <span className="stationTagline">{dj.tagline || dj.handle}</span>
+                    </button>
+                    <button
+                      className="stationPreview"
+                      type="button"
+                      onClick={() => previewDj(dj)}
+                      aria-label={`Hear ${dj.name}'s voice`}
+                      title={`Hear ${dj.name}`}
+                    >
+                      {previewingDjId === dj.id ? (
+                        <Loader2 className="spinIcon" size={14} />
+                      ) : (
+                        <Volume2 size={14} />
+                      )}
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div className="requestPanel">

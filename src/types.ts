@@ -48,6 +48,8 @@ export type DjProfile = {
   id: string
   name: string
   handle: string
+  // One line that sells the character to someone who has never heard them.
+  tagline?: string
   format: string
   city: string
   stationName?: string
