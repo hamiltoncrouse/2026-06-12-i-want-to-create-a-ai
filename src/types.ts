@@ -100,6 +100,10 @@ export type VenueProfile = {
 
 export type StationContext = {
   city: string
+  // Where the listener is actually tuning in from (auto-detected), when it
+  // differs from the station's city — used for on-air welcomes, never for
+  // switching the station's own weather/news.
+  listenerCity?: string
   weather: string
   headlines: string[]
   national?: string[]

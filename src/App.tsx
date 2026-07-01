@@ -246,14 +246,12 @@ function App() {
   const [cityDraft, setCityDraft] = useState(
     () => localStorage.getItem('ai-dj-station-city') || '',
   )
-  // First visits default to the listener's own city (auto-detected) so the
-  // first break talks about THEIR weather — the fastest "how did it know
-  // that" moment. A saved choice always wins.
-  const [citySource, setCitySource] = useState<'dj' | 'listener'>(() => {
-    const saved = localStorage.getItem('ai-dj-city-source')
-    if (saved === 'dj' || saved === 'listener') return saved
-    return 'listener'
-  })
+  // The station broadcasts from the DJ's hometown by default — the locale is
+  // part of the character (Johnny IS Norwich radio). The DJ still greets the
+  // listener from wherever they actually are; "My location" remains a toggle.
+  const [citySource, setCitySource] = useState<'dj' | 'listener'>(() =>
+    localStorage.getItem('ai-dj-city-source') === 'listener' ? 'listener' : 'dj',
+  )
   const [breakEvery, setBreakEvery] = useState(() => {
     const saved = Number(localStorage.getItem('ai-dj-break-every'))
     return [1, 2, 3, 5].includes(saved) ? saved : 1
@@ -414,6 +412,27 @@ function App() {
 
   const targetCity = citySource === 'dj' ? selectedDj.city : stationCity || 'auto'
 
+  // Where the listener is actually tuning in from. The station keeps its own
+  // hometown; this only powers on-air welcomes ("joining us from Denver").
+  const listenerCityRef = useRef('')
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const response = await fetch('/api/context?city=auto')
+        const data = (await response.json()) as StationContext
+        if (cancelled || !data.city) return
+        listenerCityRef.current = data.city
+        setContext((prev) => (prev.city ? { ...prev, listenerCity: data.city } : prev))
+      } catch {
+        // No detection — the welcome line just stays generic.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   useEffect(() => {
     const controller = new AbortController()
     async function loadContext() {
@@ -421,7 +440,7 @@ function App() {
         const params = new URLSearchParams({ city: targetCity })
         const response = await fetch(`/api/context?${params}`, { signal: controller.signal })
         const data = (await response.json()) as StationContext
-        setContext(data)
+        setContext({ ...data, listenerCity: listenerCityRef.current || undefined })
       } catch {
         setContext({ ...emptyContext, city: targetCity === 'auto' ? emptyContext.city : targetCity })
       }

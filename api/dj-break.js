@@ -255,9 +255,15 @@ function fallbackBreak(body) {
     kind === 'intro'
       ? `This is ${name} on the desk at ${stationName}, broadcasting from ${city}.`
       : `${name} back with you.`
+  // A hometown station greeting its distant listener (never a locale switch).
+  const listenerHello =
+    kind === 'intro' && context.listenerCity && context.listenerCity !== city
+      ? `And a big welcome to you, tuning in all the way from ${context.listenerCity}.`
+      : ''
 
   const script = [
     intro,
+    listenerHello,
     previous.title && kind !== 'intro'
       ? `That was ${previous.title}${previous.artist ? ` by ${previous.artist}` : ''}.`
       : '',
@@ -454,6 +460,7 @@ export default async function handler(req, res) {
             ? 'This broadcast originates live from inside dj.venue.name, a (dj.venue.cuisine) in context.city, and you are the in-house host. dj.venue (tagline, owners, chef, team, signatureDishes, specials, drinks, events, hours, vibe, lore) REPLACES all real-world news, weather, traffic, and sports: never mention real news, weather, or scores. Every desk, update, and break is about the restaurant. Weave in the chef, owners, and staff by name naturally, make listeners hungry, treat every listener like a regular in the room, and invite people to come in or call. Keep everything in-world and inviting; never sound like an ad agency.'
             : 'The station broadcasts from context.city. context.weather, context.headlines (local), context.national (US), context.world (international), context.sports, context.facts, and localTime are the only sources of real-world facts — never invent news, scores, or local facts beyond them.',
           'The DJ persona city is backstory only; the show is local to context.city.',
+          "context.listenerCity, when present and different from context.city, is where the current listener is actually streaming from. Once in a while — especially on intro breaks — warmly welcome that listener joining from afar (e.g. \"tuning in all the way from Denver\"), like a hometown station greeting a distant fan. The station itself stays rooted in context.city: never swap its weather, news, or identity to the listener's city.",
           'If dj.stationName or dj.callsign is present, use it as the station identity instead of the generic Airbreak name.',
           'previousTrack is the song that just ended before this break. nextTrack is the song that starts after this break. Never say nextTrack already played.',
           'If previousTrack is null or missing, do not back-announce a song; just set up nextTrack.',
