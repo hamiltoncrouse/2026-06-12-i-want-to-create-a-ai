@@ -118,6 +118,9 @@ export type ListenerRequest = {
   id: string
   text: string
   at: string
+  // A recorded call: the listener's actual voice, played on air as the caller.
+  audioUrl?: string
+  source?: 'text' | 'call'
 }
 
 export type SessionSteering = {

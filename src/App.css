@@ -986,6 +986,52 @@ textarea {
   color: var(--faint);
 }
 
+/* Call the station: hold the line, get on the air */
+.callButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 46px;
+  border: 1px dashed color-mix(in srgb, var(--dj) 45%, var(--line-strong));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--dj) 6%, transparent);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  transition:
+    border-color 0.25s ease,
+    background 0.25s ease,
+    transform 0.14s ease;
+}
+
+.callButton:not(:disabled):active {
+  transform: scale(0.98);
+}
+
+.callButton.recording {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--live) 65%, var(--line));
+  background: color-mix(in srgb, var(--live) 13%, transparent);
+  animation: callPulse 1.6s ease-in-out infinite;
+}
+
+@keyframes callPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--live) 40%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 9px transparent;
+  }
+}
+
+.requestCallIcon {
+  margin-right: 6px;
+  vertical-align: -1px;
+  color: var(--dj);
+}
+
 .requestQueue {
   display: grid;
   gap: 7px;

@@ -13,6 +13,7 @@ import {
   Newspaper,
   Pause,
   Pencil,
+  Phone,
   Play,
   Plus,
   Radio,
@@ -166,6 +167,56 @@ function filterByArtists(pool: Track[], selectedKeys: string[]) {
 // Minimal shape of a Screen Wake Lock sentinel (avoids depending on DOM lib
 // typings that aren't always present in the build).
 type WakeLockLike = { release: () => Promise<void> }
+
+function blobToBase64(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result).split(',')[1] || '')
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(blob)
+  })
+}
+
+// Find the track a request is asking for. Conservative on purpose: only match
+// when the title (or title + artist) clearly appears, so casual chatter never
+// hijacks the queue.
+function matchTrackForRequest(text: string, tracks: Track[]) {
+  const norm = (value: string) =>
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  const asked = norm(text)
+  if (!asked) return null
+  const words = new Set(asked.split(' '))
+  let best: Track | null = null
+  let bestScore = 0
+  for (const track of tracks) {
+    const title = norm(track.title || '')
+    if (title.length < 3) continue
+    const artist = norm(track.artist || '')
+    let score = 0
+    if (asked.includes(title)) {
+      score += 100
+    } else {
+      const titleWords = title.split(' ').filter((word) => word.length > 2)
+      const hits = titleWords.filter((word) => words.has(word)).length
+      if (titleWords.length && hits === titleWords.length) score += 60
+      else score += hits * 8
+    }
+    if (artist && asked.includes(artist)) score += 40
+    else if (artist) {
+      const artistWords = artist.split(' ').filter((word) => word.length > 2)
+      score += artistWords.filter((word) => words.has(word)).length * 6
+    }
+    if (score > bestScore) {
+      best = track
+      bestScore = score
+    }
+  }
+  return bestScore >= 40 ? best : null
+}
 import { useStation } from './useStation'
 import { Visualizer } from './Visualizer'
 import { StealYourFace } from './StealYourFace'
@@ -288,9 +339,22 @@ function App() {
     djs.find((dj) => dj.id === defaultDjId) ||
     djs[0]
 
-  const handleRequestsAired = useCallback((ids: string[]) => {
-    setListenerRequests((requests) => requests.filter((request) => !ids.includes(request.id)))
+  // Free a call recording's blob well after any break referencing it has aired.
+  const releaseCallAudioLater = useCallback((url: string) => {
+    window.setTimeout(() => URL.revokeObjectURL(url), 5 * 60 * 1000)
   }, [])
+
+  const handleRequestsAired = useCallback(
+    (ids: string[]) => {
+      setListenerRequests((requests) => {
+        for (const request of requests) {
+          if (ids.includes(request.id) && request.audioUrl) releaseCallAudioLater(request.audioUrl)
+        }
+        return requests.filter((request) => !ids.includes(request.id))
+      })
+    },
+    [releaseCallAudioLater],
+  )
 
   const station = useStation(
     selectedDj,
@@ -302,6 +366,7 @@ function App() {
   )
   const {
     tracks,
+    cueTrack,
     setLibrary,
     currentIndex,
     currentTrack,
@@ -1046,13 +1111,133 @@ function App() {
       id: `request-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       text,
       at: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+      source: 'text',
     }
+    // If we can confidently find the song they asked for, cue it next.
+    const match = matchTrackForRequest(text, tracks)
+    if (match) cueTrack(match.id)
     setListenerRequests((requests) => [...requests, request].slice(-8))
     setRequestDraft('')
-  }, [requestDraft])
+  }, [cueTrack, requestDraft, tracks])
 
-  const removeRequest = useCallback((id: string) => {
-    setListenerRequests((requests) => requests.filter((request) => request.id !== id))
+  const removeRequest = useCallback(
+    (id: string) => {
+      setListenerRequests((requests) => {
+        const removed = requests.find((request) => request.id === id)
+        if (removed?.audioUrl) releaseCallAudioLater(removed.audioUrl)
+        return requests.filter((request) => request.id !== id)
+      })
+    },
+    [releaseCallAudioLater],
+  )
+
+  // ---- Call the station: record the listener, put their voice on the air ----
+  const [callState, setCallState] = useState<'idle' | 'recording' | 'connecting'>('idle')
+  const [callSeconds, setCallSeconds] = useState(0)
+  const [callHint, setCallHint] = useState('')
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const callChunksRef = useRef<Blob[]>([])
+  const callStopTimerRef = useRef(0)
+  const callTickRef = useRef(0)
+
+  const finishCall = useCallback(
+    async (blob: Blob, mime: string) => {
+      setCallState('connecting')
+      const audioUrl = URL.createObjectURL(blob)
+      let text = ''
+      try {
+        const base64 = await blobToBase64(blob)
+        const response = await fetch('/api/transcribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ audio: base64, mime }),
+        })
+        if (response.ok) {
+          const data = (await response.json()) as { text?: string }
+          text = (data.text || '').trim()
+        }
+      } catch {
+        // The call still airs; the DJ just responds without a transcript.
+      }
+      let cued = false
+      if (text) {
+        const match = matchTrackForRequest(text, tracks)
+        if (match) cued = cueTrack(match.id)
+      }
+      const request: ListenerRequest = {
+        id: `call-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        text,
+        at: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+        audioUrl,
+        source: 'call',
+      }
+      setListenerRequests((requests) => {
+        const next = [...requests, request].slice(-8)
+        for (const dropped of requests) {
+          if (!next.includes(dropped) && dropped.audioUrl) releaseCallAudioLater(dropped.audioUrl)
+        }
+        return next
+      })
+      setCallHint(
+        cued
+          ? "You're going on the air — and your song is cued up next."
+          : "You're going on the air at the next break.",
+      )
+      setCallState('idle')
+      setCallSeconds(0)
+      feedback('select')
+    },
+    [cueTrack, releaseCallAudioLater, tracks],
+  )
+
+  const startCall = useCallback(async () => {
+    if (callState !== 'idle') return
+    setCallHint('')
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mime = MediaRecorder.isTypeSupported?.('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported?.('audio/mp4')
+          ? 'audio/mp4'
+          : ''
+      const recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined)
+      callChunksRef.current = []
+      recorder.ondataavailable = (event) => {
+        if (event.data.size) callChunksRef.current.push(event.data)
+      }
+      recorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop())
+        window.clearTimeout(callStopTimerRef.current)
+        window.clearInterval(callTickRef.current)
+        const type = recorder.mimeType || mime || 'audio/webm'
+        const blob = new Blob(callChunksRef.current, { type })
+        if (blob.size < 2000) {
+          // Too short to be a real call.
+          setCallState('idle')
+          setCallSeconds(0)
+          setCallHint('That was a little quick — hold the line and say your piece.')
+          return
+        }
+        void finishCall(blob, type)
+      }
+      mediaRecorderRef.current = recorder
+      recorder.start()
+      feedback('play')
+      setCallSeconds(0)
+      setCallState('recording')
+      callTickRef.current = window.setInterval(() => setCallSeconds((s) => s + 1), 1000)
+      callStopTimerRef.current = window.setTimeout(() => {
+        if (recorder.state === 'recording') recorder.stop()
+      }, 15000)
+    } catch {
+      setCallHint('Microphone unavailable — check your browser permissions.')
+      setCallState('idle')
+    }
+  }, [callState, finishCall])
+
+  const hangUp = useCallback(() => {
+    const recorder = mediaRecorderRef.current
+    if (recorder && recorder.state === 'recording') recorder.stop()
   }, [])
 
   const progressPct = progress.duration ? (progress.time / progress.duration) * 100 : 0
@@ -1266,6 +1451,24 @@ function App() {
                   <Send size={18} />
                 </button>
               </div>
+              <button
+                type="button"
+                className={callState === 'recording' ? 'callButton recording' : 'callButton'}
+                onClick={callState === 'recording' ? hangUp : startCall}
+                disabled={callState === 'connecting'}
+              >
+                {callState === 'connecting' ? (
+                  <Loader2 className="spinIcon" size={17} />
+                ) : (
+                  <Phone size={16} />
+                )}
+                {callState === 'recording'
+                  ? `On the line ${callSeconds}s — tap to hang up`
+                  : callState === 'connecting'
+                    ? 'Patching you through to the studio…'
+                    : 'Call the station — get on the air'}
+              </button>
+              {callHint && <p className="hintLine">{callHint}</p>}
               {!!listenerRequests.length && (
                 <div className="requestQueue">
                   {listenerRequests.slice(0, 3).map((request) => (
@@ -1276,7 +1479,14 @@ function App() {
                       onClick={() => removeRequest(request.id)}
                       title="Remove request"
                     >
-                      <span>{request.text}</span>
+                      <span>
+                        {request.source === 'call' && (
+                          <Phone size={11} className="requestCallIcon" aria-hidden="true" />
+                        )}
+                        {request.source === 'call'
+                          ? request.text || 'Caller on the line'
+                          : request.text}
+                      </span>
                       <small>{request.at}</small>
                     </button>
                   ))}

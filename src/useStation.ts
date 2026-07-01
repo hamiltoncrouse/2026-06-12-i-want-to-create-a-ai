@@ -1334,6 +1334,9 @@ export function useStation(
   // with a produced spot, force its commercial onto the spot cadence and
   // suppress the rotation's other commercials so the spot is the only ad.
   const resolveKind = useCallback((): BreakKind => {
+    // A recorded listener call takes over the next break: the caller's actual
+    // voice goes on the air and the DJ responds.
+    if (listenerRequestsRef.current.some((request) => request.audioUrl)) return 'caller'
     const seq = breakSeqRef.current
     const hasSpot = Boolean(djSpots[djRef.current.id]?.length)
     if (hasSpot && spotBreakDue(seq)) return 'commercial'
@@ -1405,6 +1408,9 @@ export function useStation(
         }
         setBufferStatus('Cueing the spot')
       } else {
+        // A recorded call: the caller's real voice airs; the transcript lets
+        // the writer script the DJ's answer around what was actually said.
+        const queuedCall = queuedRequests.find((request) => request.audioUrl)
         const breakResponse = await fetch('/api/dj-break', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1415,7 +1421,8 @@ export function useStation(
             previousTrack: trackBrief(previousTrack),
             nextTrack: trackBrief(nextTrack),
             queue: activeTracks.slice(index, index + 6).map(trackBrief).filter(Boolean),
-            listenerRequests: queuedRequests,
+            listenerRequests: queuedRequests.map(({ id, text }) => ({ id, text })),
+            listenerCall: queuedCall ? { text: queuedCall.text } : undefined,
             steering: steeringRef.current,
             usageTip,
             recentScripts: recentScriptsRef.current,
@@ -1425,6 +1432,26 @@ export function useStation(
         plan = (await breakResponse.json()) as BreakPlan
         plan.usageTipId = usageTip?.id
         segments = plan.segments?.length ? plan.segments : [{ speaker: 'dj', text: plan.script }]
+
+        if (queuedCall?.audioUrl && kind === 'caller') {
+          // Replace the scripted caller with the listener's actual recording:
+          // ring + recording as back-to-back "spot" assets so the gapless
+          // splicer trims the dead air between them (a raw phone-mic clip
+          // already sounds like a call — no synthetic phone EQ needed). If the
+          // plan came back without a caller slot, splice one in after the
+          // DJ's opener.
+          let callerAt = segments.findIndex((segment) => segment.speaker === 'caller')
+          if (callerAt < 0) {
+            callerAt = Math.min(1, segments.length)
+            segments.splice(callerAt, 0, { speaker: 'caller', text: queuedCall.text })
+          }
+          segments[callerAt] = {
+            speaker: 'spot',
+            text: queuedCall.text || 'Listener call',
+            audioUrl: queuedCall.audioUrl,
+          }
+          segments.splice(callerAt, 0, { speaker: 'spot', text: '', audioUrl: '/audio/phone-ring.mp3' })
+        }
       }
       setBufferStatus('Recording the voice takes')
 
@@ -1873,7 +1900,10 @@ export function useStation(
       // there would go silent and stall the show. So while hidden, skip the
       // break and keep songs flowing back to back; the break resumes (the
       // counter keeps climbing) as soon as the app is in the foreground again.
-      if (songsSinceBreakRef.current >= breakEveryRef.current) {
+      // A queued call jumps the break cadence: the caller goes on the air at
+      // the very next transition instead of waiting out "every N songs".
+      const callWaiting = listenerRequestsRef.current.some((request) => request.audioUrl)
+      if (songsSinceBreakRef.current >= breakEveryRef.current || callWaiting) {
         if (document.hidden) {
           // Locked/backgrounded: a live break would be silent. Every few songs
           // air the longer, song-aware break we pre-built during the track;
@@ -2108,9 +2138,12 @@ export function useStation(
     setPlayCount(nextCount)
     stopRef.current = false
     void (async () => {
-      const nextIndex = await findPlayableIndex(
-        (indexRef.current + 1) % Math.max(1, tracksRef.current.length),
-      )
+      // Honor a cued request (or the already-verified natural next track).
+      const pending = nextIndexPromiseRef.current
+      nextIndexPromiseRef.current = null
+      const nextIndex = pending
+        ? await pending
+        : await findPlayableIndex((indexRef.current + 1) % Math.max(1, tracksRef.current.length))
       if (stopRef.current) return
       playBreakThenSong(nextIndex, nextCount, previousIndex)
     })()
@@ -2215,10 +2248,21 @@ export function useStation(
     }
   }, [])
 
+  // Jump a requested song to the front of the line: it becomes the next
+  // track, and the upcoming break gets written around it.
+  const cueTrack = useCallback((trackId: string) => {
+    const index = tracksRef.current.findIndex((track) => track.id === trackId)
+    if (index < 0) return false
+    nextIndexPromiseRef.current = Promise.resolve(index)
+    setPlannedNextIndex(index)
+    return true
+  }, [])
+
   const isOnAir = mode === 'break' || mode === 'song' || mode === 'loading'
 
   return {
     tracks,
+    cueTrack,
     setLibrary,
     currentIndex,
     currentTrack: tracks[currentIndex] as Track | undefined,
