@@ -114,6 +114,12 @@ function prettyPlaylist(file: string) {
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ')
 }
+// A stable hue per playlist so each mood tile gets its own color identity.
+function playlistHue(file: string) {
+  let hash = 0
+  for (const char of file) hash = (hash * 31 + char.charCodeAt(0)) >>> 0
+  return hash % 360
+}
 
 // Some genres show a logo instead of a text label on their chip.
 function genreIcon(file: string) {
@@ -988,12 +994,16 @@ function App() {
 
   return (
     <div className="app" style={{ '--dj': selectedDj.color } as CSSProperties}>
+      <div className="grain" aria-hidden="true" />
       <header className="topBar">
         <div className="brand">
           <span className="brandMark">
             <Radio size={18} aria-hidden="true" />
           </span>
-          <span className="brandName">Airbreak</span>
+          <span className="brandStack">
+            <span className="brandName">Airbreak</span>
+            <span className="brandFreq">{selectedDj.stationName || 'AI Radio'}</span>
+          </span>
         </div>
         <div className={isOnAir ? 'signalPill live' : 'signalPill'}>
           <span className="signalDot" />
@@ -1013,6 +1023,10 @@ function App() {
                   <span className="vinylLabel">{initials(selectedDj.name)}</span>
                 </div>
               </Visualizer>
+              <span
+                className={mode === 'song' ? 'tonearm playing' : 'tonearm'}
+                aria-hidden="true"
+              />
               {bloomKey > 0 && <span key={bloomKey} className="bloom" aria-hidden="true" />}
             </div>
 
@@ -1021,6 +1035,15 @@ function App() {
               <h1>{currentTrack?.title || 'No track loaded'}</h1>
               <p className="artistLine">{currentTrack?.artist || 'Load some music to begin'}</p>
             </div>
+
+            {nextTrack && nextTrack.id !== currentTrack?.id && (
+              <div className="ticker" aria-label="Up next">
+                <span className="tickerTag">Up next</span>
+                <span className="tickerText">
+                  {nextTrack.title} — {nextTrack.artist}
+                </span>
+              </div>
+            )}
 
             <div className="seekRow">
               <span className="timeLabel">{formatTime(progress.time)}</span>
@@ -1104,6 +1127,24 @@ function App() {
                 {nowScript ||
                   `${selectedDj.name} is standing by with ${selectedDj.format}. Hit play to go live.`}
               </p>
+            </div>
+
+            <div className="djRail" role="group" aria-label="Switch DJ">
+              {djs.map((dj) => (
+                <button
+                  key={dj.id}
+                  type="button"
+                  className={dj.id === selectedDj.id ? 'railDj active' : 'railDj'}
+                  onClick={() => selectDj(dj.id)}
+                  aria-pressed={dj.id === selectedDj.id}
+                  title={dj.name}
+                >
+                  <span className="railAvatar" style={{ background: dj.color }}>
+                    {initials(dj.name)}
+                  </span>
+                  <span className="railName">{dj.name.split(' ')[0]}</span>
+                </button>
+              ))}
             </div>
 
             <div className="requestPanel">
@@ -1212,26 +1253,21 @@ function App() {
                         type="button"
                         className={
                           selectedPlaylist === playlist.file
-                            ? 'playlistChip active'
-                            : 'playlistChip'
+                            ? 'playlistTile active'
+                            : 'playlistTile'
                         }
+                        style={{ '--pl-hue': playlistHue(playlist.file) } as CSSProperties}
                         onClick={() => selectPlaylist(playlist.file)}
                         disabled={scanning}
                       >
-                        {playlist.label}
+                        <span className="playlistTileName">{playlist.label}</span>
+                        <span className="playlistTileSub">
+                          {selectedPlaylist === playlist.file ? 'Now spinning' : 'Curated set'}
+                        </span>
                       </button>
                     ))}
                   </div>
                 )}
-              </div>
-            )}
-
-            {nextTrack && nextTrack.id !== currentTrack?.id && (
-              <div className="upNext">
-                <span className="upNextLabel">Up next</span>
-                <span className="upNextTrack">
-                  {nextTrack.title} · {nextTrack.artist}
-                </span>
               </div>
             )}
 
@@ -2027,6 +2063,45 @@ function App() {
           </section>
         )}
       </main>
+
+      {tab !== 'onair' && currentTrack && mode !== 'idle' && (
+        <div className="miniPlayer">
+          <button
+            className="miniOpen"
+            type="button"
+            onClick={() => setTab('onair')}
+            aria-label="Open the player"
+          >
+            <span
+              className={mode === 'song' ? 'miniDisc spinning' : 'miniDisc'}
+              style={{ '--dj': selectedDj.color } as CSSProperties}
+            />
+            <span className="miniMeta">
+              <strong>
+                {mode === 'break' || mode === 'loading'
+                  ? `${selectedDj.name} on the mic`
+                  : currentTrack.title}
+              </strong>
+              <small>
+                {mode === 'break' || mode === 'loading'
+                  ? selectedDj.stationName || 'Airbreak'
+                  : currentTrack.artist}
+              </small>
+            </span>
+          </button>
+          <button
+            className="miniBtn"
+            type="button"
+            onClick={handleToggle}
+            aria-label={isOnAir ? 'Pause station' : 'Start station'}
+          >
+            {isOnAir ? <Pause size={19} /> : <Play size={19} className="playGlyph" />}
+          </button>
+          <button className="miniBtn" type="button" onClick={skip} aria-label="Skip track">
+            <SkipForward size={17} />
+          </button>
+        </div>
+      )}
 
       <nav className="tabBar" aria-label="Sections">
         {tabs.map(({ id, label, icon: Icon }) => (
