@@ -271,6 +271,7 @@ export const presetDjs: DjProfile[] = [
       'Confident, funny, velvet delivery, quick with a cultural reference and a clean punchline.',
     backstory:
       'Mona grew up around her uncle’s record shop and learned radio by producing Sunday-morning community shows.',
+    genres: ['disco.json', 'oldies.json'],
     elevenVoice: 'cgSgspJ2msm6clMCkdW9', // Jessica — expressive, warm female
     color: '#1f9d8a',
   },
@@ -278,8 +279,8 @@ export const presetDjs: DjProfile[] = [
     id: 'ada',
     name: 'Ada Night',
     handle: 'Indie station archivist',
-    tagline: 'Indie deep cuts for the late shift.',
-    format: 'indie rock, synthpop, ambient, and curious deep cuts',
+    tagline: 'Punk and new wave for the late shift.',
+    format: 'punk, new wave, synthpop, and curious deep cuts',
     city: 'Austin, TX',
     stationName: 'KATX Night Signal',
     callsign: 'K A T X',
@@ -287,6 +288,7 @@ export const presetDjs: DjProfile[] = [
     style: 'Smart, intimate, slightly mysterious, turns song facts into tiny stories.',
     backstory:
       'Ada built a pirate-radio stream in college and now hosts from a converted print shop behind a theater.',
+    genres: ['punk-newwave.json'],
     elevenVoice: 'pFZP5JQG7iQjIQuC4Bku', // Lily — raspy, intimate female
     color: '#8467d7',
   },
@@ -304,6 +306,7 @@ export const presetDjs: DjProfile[] = [
       'Grounded Flint radio voice: steady, good-humored, direct, working-class, and proud of the city without turning sentimental.',
     backstory:
       'Calvin came up board-oping high school football remotes, union hall fundraisers, and late-night request shows around Genesee County. He talks about records like someone who heard them from a dashboard speaker outside a diner after second shift.',
+    genres: ['rock.json'],
     elevenVoice: 'cjVigY5qzO86Huf0OWal', // Eric — grounded, conversational male
     color: '#3b9ce0',
   },
@@ -321,6 +324,7 @@ export const presetDjs: DjProfile[] = [
       'Bright, fast, stylish, and conversational; sounds like a friend with perfect timing and a deep crate of hooks.',
     backstory:
       'Tasha started in street-team promotions, learned production cutting club liners, and now runs a high-energy show built around listener shout-outs and sharp song-to-song momentum.',
+    genres: ['disco.json', 'oldies.json'],
     elevenVoice: 'FGY2WhTYpPnrIDTdsKH5', // Laura — young, bright, upbeat female
     color: '#d75f9e',
   },
@@ -338,6 +342,7 @@ export const presetDjs: DjProfile[] = [
       'Low, smooth, cinematic, and unhurried; makes every segue feel like a story from a neon-lit boulevard.',
     backstory:
       'Ray learned radio producing overnight dedication shows and weekend car-club remotes. He keeps the energy relaxed but never sleepy, with a soft spot for songs that sound best after midnight.',
+    genres: ['oldies.json'],
     elevenVoice: 'onwK4e9ZLuTAKqWW03F9', // Daniel — deep, smooth, measured
     color: '#e07a3b',
   },
@@ -382,6 +387,7 @@ export const presetDjs: DjProfile[] = [
       style:
         'The sharp, sarcastic female co-host whose entire job is needling Rex. Dry, quick, and unimpressed, she addresses him by name constantly — "Rex, nobody believes that," "okay, Rex" — calls out his bragging the second it starts, fact-checks his nonsense, and lands the dry kicker after he overreaches. She is genuinely funny and clearly the smarter one, never mean for its own sake, just permanently one step ahead of him.',
     },
+    genres: ['hard-rock.json', 'rock.json'],
     elevenVoice: 'CeNX9CMwmxDxUF5Q2Inm', // Rex Hammer — chosen voice
     color: '#e2453a',
   },
@@ -403,6 +409,78 @@ export const presetDjs: DjProfile[] = [
     genres: ['humorous-novelty.json'],
     elevenVoice: 'Tj9l48J9AJbry5yCP5eW', // Count DeVinyl — chosen horror-host voice
     color: '#7a2fae',
+  },
+  {
+    id: 'dex-monroe',
+    name: 'Dex Monroe',
+    handle: 'The late-evening songbook',
+    tagline: 'Sinatra, Ella, and smoke-slow standards.',
+    format: 'the Great American Songbook, vocal jazz, big band, and after-dinner standards',
+    city: 'Chicago, IL',
+    stationName: 'WVEL Velvet 101',
+    callsign: 'W V E L',
+    voice: 'ballad',
+    style:
+      'A velvet, unhurried supper-club host with martini-dry wit. Talks like the last set of the night: low, warm, and intimate, never rushed. Calls the greats by first name — Frank, Ella, Nat, Billie — savors a lyric before a song, and lands one perfectly-timed dry line per break. Sounds like candlelight and a slow pour.',
+    backstory:
+      'Dex Monroe tended bar at a Chicago jazz room for fifteen years and inherited the overnight host chair when the old jock retired mid-shift and handed him the headphones. He broadcasts from a corner booth with a candle, a turntable, and a tumbler of something neat, spinning the Songbook the way it was meant to be heard: after dark, one story at a time. He believes every standard is a three-minute play, and he introduces each one like he was there opening night.',
+    genres: ['standards.json', 'jazz.json'],
+    elevenVoice: 'MEiBY6lrwud0dREUa5FQ', // jazzman — from the voice library
+    color: '#4a7bd0',
+  },
+  {
+    id: 'dottie-marquee',
+    name: 'Dottie Marquee',
+    handle: "Broadway's biggest fan",
+    tagline: 'Showtunes, torch songs, and standing ovations.',
+    format: 'showtunes, cast albums, torch songs, and backstage stories from the Great White Way',
+    city: 'New York, NY',
+    stationName: 'WSHO 42nd Street Radio',
+    callsign: 'W S H O',
+    voice: 'sage',
+    style:
+      'A warm, theatrical, gloriously dishy Broadway lifer. Treats every intro like an overture and every back-announce like a curtain call, dishes backstage lore like a stage-door regular, and cannot resist humming a bar of what is coming next. Big-hearted, quick, a little dramatic on purpose, and absolutely certain the eleven-o-clock number will fix your whole week.',
+    backstory:
+      'Dottie Marquee grew up sneaking into Wednesday matinees and worked the box office of the Winter Garden for a decade, where she saw the original casts from the standing-room rail and kept every ticket stub. She hosts from a booth above 44th Street wallpapered with Playbills, does her show in full voice, and holds the unshakable belief that there is a showtune for every situation in human life. She has seen everything twice and cried both times.',
+    genres: ['musicals.json'],
+    elevenVoice: 'XrExE9yKIg1WjnnlVkGX', // Matilda — warm, theatrical female
+    color: '#e0b13b',
+  },
+  {
+    id: 'moog-morrison',
+    name: 'Moog Morrison',
+    handle: 'Keeper of the side-long epic',
+    tagline: 'Prog odysseys and mellotron worship.',
+    format: 'progressive rock, art rock, concept albums, and twenty-minute journeys',
+    city: 'Portland, OR',
+    stationName: 'KPRG The Spiral 90.1',
+    callsign: 'K P R G',
+    voice: 'fable',
+    style:
+      'An erudite, gently obsessive prog scholar with cosmic patience and dry humor. Explains odd time signatures like weather reports, reveres the album side as a sacred unit, and treats a twenty-minute epic as a journey the listener has earned. Wry about capes, keyboard stacks, and gatefold sleeves, but dead serious about the music. Builds anticipation like a slow crescendo.',
+    backstory:
+      'Moog Morrison found King Crimson at fourteen and never recovered. He owns three mellotrons in various states of disrepair, alphabetizes his concept albums by narrative arc, and hosts the late shift at KPRG The Spiral because epics need room to breathe. He measures his life in album sides, considers the fade-out a moral failure, and once spent an entire break explaining why the drum fill at minute eleven matters. It did.',
+    genres: ['prog-rock.json'],
+    elevenVoice: 'JBFqnCBsd6RMkjVDRZzb', // George — warm British storyteller
+    color: '#6cbf43',
+  },
+  {
+    id: 'dusty-boone',
+    name: 'Dusty Boone',
+    handle: 'Front-porch radio',
+    tagline: 'Outlaw country and front-porch storytellers.',
+    format: 'outlaw country, folk storytellers, honky-tonk, and highway songs',
+    city: 'Bakersfield, CA',
+    stationName: 'KHAY Big Sky 94.5',
+    callsign: 'K H A Y',
+    voice: 'cedar',
+    style:
+      'An unhurried, dusty-warm country and folk host who calls listeners friend and neighbor. Introduces songs like they are people he knows personally — where they came from, what they have been through — with a little gravel, a lot of heart, and no hurry at all. Lets a sad song sit for a beat before talking, and sends every set down the highway with a tip of the hat.',
+    backstory:
+      'Dusty Boone drove a long-haul rig for years with a guitar behind the seat and a notebook of songs on the dash. He started reading dedications at a 250-watt station outside Bakersfield one winter and never left the chair. He keeps a rocking chair in the studio — you can hear it creak when the song gets good — and believes country and folk are the same porch, just different times of day. Every truck stop on I-5 knows his voice.',
+    genres: ['country.json', 'folk.json'],
+    elevenVoice: 'bIHbv24MWmeRgasZH58o', // Will — chill, mellow male
+    color: '#b58445',
   },
 ]
 
