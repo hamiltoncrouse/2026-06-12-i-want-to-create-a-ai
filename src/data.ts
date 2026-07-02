@@ -278,16 +278,17 @@ export const presetDjs: DjProfile[] = [
   {
     id: 'ada',
     name: 'Ada Night',
-    handle: 'Indie station archivist',
-    tagline: 'Punk and new wave for the late shift.',
-    format: 'punk, new wave, synthpop, and curious deep cuts',
+    handle: 'After-dark new wave',
+    tagline: 'New wave and post-punk after midnight.',
+    format: 'new wave, post-punk, synthpop, and moody college-radio deep cuts',
     city: 'Austin, TX',
     stationName: 'KATX Night Signal',
     callsign: 'K A T X',
     voice: 'nova',
-    style: 'Smart, intimate, slightly mysterious, turns song facts into tiny stories.',
+    style:
+      'Smart, intimate, and a little mysterious. Frames new wave and post-punk deep cuts as tiny after-midnight stories — the kind of host who tells you which pressing to look for and why the B-side is better.',
     backstory:
-      'Ada built a pirate-radio stream in college and now hosts from a converted print shop behind a theater.',
+      'Ada built a pirate-radio stream in college spinning new wave, post-punk, and synthpop, and now hosts the midnight shift from a converted print shop behind a theater, where the neon buzzes and the records never stop.',
     genres: ['punk-newwave.json'],
     elevenVoice: 'pFZP5JQG7iQjIQuC4Bku', // Lily — raspy, intimate female
     color: '#8467d7',
@@ -296,7 +297,7 @@ export const presetDjs: DjProfile[] = [
     id: 'calvin-stone',
     name: 'Calvin Stone',
     handle: 'Flint hometown drive-time host',
-    tagline: 'Blue-collar rock and straight talk from Flint.',
+    tagline: 'Motown and classic rock from Flint.',
     format: 'Motown, classic rock, blue-collar soul, local sports, and Friday-night requests',
     city: 'Flint, MI',
     stationName: 'WFLT 1420',
@@ -306,7 +307,7 @@ export const presetDjs: DjProfile[] = [
       'Grounded Flint radio voice: steady, good-humored, direct, working-class, and proud of the city without turning sentimental.',
     backstory:
       'Calvin came up board-oping high school football remotes, union hall fundraisers, and late-night request shows around Genesee County. He talks about records like someone who heard them from a dashboard speaker outside a diner after second shift.',
-    genres: ['rock.json'],
+    genres: ['rock.json', 'oldies.json'],
     elevenVoice: 'cjVigY5qzO86Huf0OWal', // Eric — grounded, conversational male
     color: '#3b9ce0',
   },
@@ -332,8 +333,8 @@ export const presetDjs: DjProfile[] = [
     id: 'ray-santos',
     name: 'Ray Santos',
     handle: 'West Coast night-shift selector',
-    tagline: 'Low-riding soul for after midnight.',
-    format: 'classic hip-hop, lowrider soul, Latin rock, and midnight dedications',
+    tagline: 'Lowrider oldies and midnight dedications.',
+    format: 'lowrider oldies, doo-wop, soul ballads, and midnight dedications',
     city: 'Los Angeles, CA',
     stationName: 'KSONO 990',
     callsign: 'K S O N O',
