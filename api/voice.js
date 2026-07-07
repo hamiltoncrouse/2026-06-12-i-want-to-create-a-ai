@@ -203,10 +203,19 @@ export default async function handler(req, res) {
 
   try {
     const wantsElevenLabs = provider === 'elevenlabs' || provider === '11labs'
-    const audio = wantsElevenLabs
-      ? (await synthElevenLabs({ text, voice, speaker, elevenVoiceId })) ||
-        (await synthOpenAI({ text, voice, style, speaker }))
-      : await synthOpenAI({ text, voice, style, speaker })
+    let usedProvider = 'openai'
+    let audio = null
+    if (wantsElevenLabs) {
+      audio = await synthElevenLabs({ text, voice, speaker, elevenVoiceId })
+      if (audio) {
+        usedProvider = 'elevenlabs'
+      } else {
+        audio = await synthOpenAI({ text, voice, style, speaker })
+        usedProvider = audio ? 'openai-fallback' : 'none'
+      }
+    } else {
+      audio = await synthOpenAI({ text, voice, style, speaker })
+    }
 
     if (!audio) {
       res.status(204).end()
@@ -215,6 +224,9 @@ export default async function handler(req, res) {
 
     res.setHeader('Content-Type', 'audio/mpeg')
     res.setHeader('Cache-Control', 'no-store')
+    // Diagnostic: which TTS provider actually produced this audio. Lets us tell
+    // a real ElevenLabs voice from a silent fallback to the OpenAI voice.
+    res.setHeader('X-Voice-Provider', usedProvider)
     res.status(200).send(audio)
   } catch {
     res.status(204).end()
