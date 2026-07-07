@@ -480,7 +480,7 @@ export const presetDjs: DjProfile[] = [
     backstory:
       'Dusty Boone drove a long-haul rig for years with a guitar behind the seat and a notebook of songs on the dash. He started reading dedications at a 250-watt station outside Bakersfield one winter and never left the chair. He keeps a rocking chair in the studio — you can hear it creak when the song gets good — and believes country and folk are the same porch, just different times of day. Every truck stop on I-5 knows his voice.',
     genres: ['country.json', 'folk.json'],
-    elevenVoice: 'bIHbv24MWmeRgasZH58o', // Will — chill, mellow male
+    elevenVoice: 'YXpFCvM1S3JbWEJhoskW', // Wyatt — wise rustic cowboy
     color: '#b58445',
   },
   {
