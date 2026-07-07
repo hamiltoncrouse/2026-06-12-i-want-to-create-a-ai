@@ -23,7 +23,7 @@ export default async function handler(req, res) {
   const probeId = req.query && req.query.probe
   if (probeId) {
     try {
-      const model = process.env.ELEVENLABS_MODEL || 'eleven_turbo_v2_5'
+      const model = (req.query && req.query.model) || process.env.ELEVENLABS_MODEL || 'eleven_turbo_v2_5'
       const r = await fetch(
         `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(probeId)}`,
         {
