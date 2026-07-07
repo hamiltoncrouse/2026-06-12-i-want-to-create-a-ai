@@ -18,6 +18,23 @@ export default async function handler(req, res) {
     res.status(204).end()
     return
   }
+  // Diagnostic: ?detail=<voiceId> returns the voice's metadata (owner/sharing/
+  // samples/high_quality_base_model_ids) so we can see why it might fail.
+  const detailId = req.query && req.query.detail
+  if (detailId) {
+    try {
+      const r = await fetch(
+        `https://api.elevenlabs.io/v1/voices/${encodeURIComponent(detailId)}`,
+        { headers: { 'xi-api-key': apiKey } },
+      )
+      const body = await r.text().catch(() => '')
+      res.setHeader('Cache-Control', 'no-store')
+      res.status(200).send(body)
+    } catch (error) {
+      res.status(200).json({ error: error instanceof Error ? error.message : 'detail failed' })
+    }
+    return
+  }
   // Diagnostic: ?probe=<voiceId> attempts a tiny TTS synthesis and reports the
   // raw ElevenLabs status + error body, so we can see WHY a voice fails.
   const probeId = req.query && req.query.probe
