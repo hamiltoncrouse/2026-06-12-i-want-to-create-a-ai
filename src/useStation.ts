@@ -140,12 +140,19 @@ function softenVocatives(text: string, names: string[]) {
 // spaced out, which is ElevenLabs' recommended way to spell something letter by
 // letter. Pull the call letters from the DJ's station name / call sign and
 // space any jammed occurrence in the spoken text ("WICH" -> "W I C H").
+// Call-letter-shaped brands that are also real English words are meant to be
+// spoken as the word (WORD, the Beatles song), not spelled out letter by letter.
+const SPOKEN_AS_WORD = new Set(['word', 'weird', 'kind', 'hard', 'wave'])
+
 function callLetterTokens(dj: DjProfile) {
   const tokens = new Set<string>()
-  const stationFirst = (dj.stationName || '').trim().split(/\s+/)[0]
-  if (/^[KW][A-Za-z]{2,4}$/.test(stationFirst)) tokens.add(stationFirst.toUpperCase())
-  const jammedCallsign = (dj.callsign || '').replace(/[^A-Za-z]/g, '')
-  if (/^[KW][A-Za-z]{2,4}$/.test(jammedCallsign)) tokens.add(jammedCallsign.toUpperCase())
+  const add = (raw: string) => {
+    if (/^[KW][A-Za-z]{2,4}$/.test(raw) && !SPOKEN_AS_WORD.has(raw.toLowerCase())) {
+      tokens.add(raw.toUpperCase())
+    }
+  }
+  add((dj.stationName || '').trim().split(/\s+/)[0])
+  add((dj.callsign || '').replace(/[^A-Za-z]/g, ''))
   return [...tokens]
 }
 
