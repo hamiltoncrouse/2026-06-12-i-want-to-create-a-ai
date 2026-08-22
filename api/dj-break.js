@@ -419,6 +419,26 @@ function compactUsageTip(usageTip) {
   }
 }
 
+function compactPersonaColor(dj) {
+  if (!dj || typeof dj !== 'object') return null
+  const venue = dj.venue && typeof dj.venue === 'object' ? dj.venue : null
+  const coHost = dj.coHost && typeof dj.coHost === 'object' ? dj.coHost : null
+  const out = {
+    name: String(dj.name || '').slice(0, 80),
+    handle: String(dj.handle || '').slice(0, 120),
+    format: String(dj.format || '').slice(0, 180),
+    style: String(dj.style || '').slice(0, 420),
+    backstory: String(dj.backstory || '').slice(0, 900),
+    coHostStyle: coHost?.style ? String(coHost.style).slice(0, 420) : undefined,
+    venueLore: venue?.lore ? stringArray(venue.lore, 5, 160) : [],
+  }
+  return Object.fromEntries(
+    Object.entries(out).filter(([, value]) =>
+      Array.isArray(value) ? value.length : Boolean(String(value || '').trim()),
+    ),
+  )
+}
+
 function parseResponseText(response) {
   if (response.output_text) return response.output_text
 
@@ -449,6 +469,7 @@ export default async function handler(req, res) {
   const queue = Array.isArray(body.queue) ? body.queue.slice(0, 6).map(compactTrack).filter(Boolean) : []
   const steering = compactSteering(body.steering)
   const usageTip = compactUsageTip(body.usageTip)
+  const personaColor = compactPersonaColor(body.dj)
   const venue = body.dj && typeof body.dj.venue === 'object' && body.dj.venue ? body.dj.venue : null
   const coHost =
     body.dj && typeof body.dj.coHost === 'object' && body.dj.coHost && body.dj.coHost.name
@@ -483,6 +504,9 @@ export default async function handler(req, res) {
           'The DJ persona city is backstory only; the show is local to context.city.',
           "context.listenerCity, when present and different from context.city, is where the current listener is actually streaming from. Once in a while — especially on intro breaks — warmly welcome that listener joining from afar (e.g. \"tuning in all the way from Denver\"), like a hometown station greeting a distant fan. The station itself stays rooted in context.city: never swap its weather, news, or identity to the listener's city.",
           'If dj.stationName or dj.callsign is present, use it as the station identity instead of the generic Airbreak name.',
+          'personaColor is the DJ\'s lived-in source material: backstory, format, style, handle, co-host style, and venue lore. Use it as a jumping-off point for color, opinions, analogies, running bits, places they know, old jobs, obsessions, grudges, and taste — not as a biography readout.',
+          'For intro, songTalk, caller, and commercial breaks, usually let one small personaColor detail shape a line or viewpoint when it naturally fits. Keep it to one vivid aside, not a paragraph. Do not repeat the same backstory detail if it appears in recentScripts or showNotes.',
+          'Backstory details are true for the DJ persona, but they are not real-world news. Never use them to invent current facts, prices, hours, scores, deaths, awards, quotes, or events.',
           'previousTrack is the song that just ended before this break. nextTrack is the song that starts after this break. Never say nextTrack already played.',
           'If previousTrack is null or missing, do not back-announce a song; just set up nextTrack.',
           'Track metadata may include album, year, genre, mood, energy, tempo, facts, djNotes, requestTags, dayparts, liveShow, and metadataConfidence.',
@@ -520,6 +544,7 @@ export default async function handler(req, res) {
           previousTrack,
           nextTrack,
           queue,
+          personaColor,
           steering,
           usageTip,
           callerNames: neutralFirstNames,
