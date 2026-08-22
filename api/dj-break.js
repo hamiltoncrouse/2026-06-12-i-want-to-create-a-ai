@@ -477,7 +477,10 @@ export default async function handler(req, res) {
       : null
   const activeKindNotes = venue ? venueKindNotes : kindNotes
   const activeReporterRoles = venue ? venueReporterRoles : reporterRoles
-  const angle = angles[Math.floor(Math.random() * angles.length)]
+  const availableAngles = body.context?.facts
+    ? angles
+    : angles.filter((item) => !item.startsWith('use a local detail from the city facts'))
+  const angle = availableAngles[Math.floor(Math.random() * availableAngles.length)]
   const reporterRole = activeReporterRoles[Math.floor(Math.random() * activeReporterRoles.length)]
   const lengthRule =
     kind === 'bumper'
