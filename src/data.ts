@@ -523,6 +523,7 @@ export const voiceOptions: VoiceName[] = [
 // here as you find voices you like in your ElevenLabs account.
 export const elevenVoiceLibrary: { name: string; id: string }[] = [
   { name: 'jazzman', id: 'MEiBY6lrwud0dREUa5FQ' },
+  { name: 'wilfred', id: 'OOVeIviBPPdmi9DevCiu' },
 ]
 
 export const djPalette = [
