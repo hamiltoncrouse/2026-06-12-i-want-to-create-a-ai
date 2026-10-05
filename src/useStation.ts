@@ -840,7 +840,7 @@ export function useStation(
         return
       }
       window.speechSynthesis.cancel()
-      const utterance = new SpeechSynthesisUtterance(text)
+      const utterance = new SpeechSynthesisUtterance(text.replace(/\[[^\]\r\n]*\]/g, '').replace(/ {2,}/g, ' ').trim())
       utterance.rate = 0.98
       utterance.pitch = 1
       utterance.onend = () => resolve()

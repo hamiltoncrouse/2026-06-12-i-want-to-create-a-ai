@@ -1,3 +1,5 @@
+import { elevenModel, voiceProvider, stripAudioTags } from '../lib/voice-config.js'
+
 const voices = new Set([
   'alloy',
   'ash',
@@ -119,7 +121,7 @@ async function synthOpenAI({ text, voice, style, speaker }) {
     body: JSON.stringify({
       model: process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts',
       voice: voices.has(voice) ? voice : 'marin',
-      input: text.slice(0, 1800),
+      input: stripAudioTags(text).slice(0, 1800),
       instructions: [
         speakerInstructions[speaker] || speakerInstructions.dj,
         typeof style === 'string' ? style : '',
@@ -159,9 +161,28 @@ async function synthElevenLabs({ text, voice, speaker, elevenVoiceId }) {
   const apiKey = elevenKey()
   if (!apiKey) return null
   const voiceId = elevenVoiceId || mapVoiceToEleven(voice)
-  const model = process.env.ELEVENLABS_MODEL || 'eleven_turbo_v2_5'
+  const model = elevenModel()
+  const isV4 = ['eleven_v4', 'eleven_v4_turbo'].includes(model)
+  const settings = elevenVoiceSettings(speaker)
+  const body = {
+    model_id: model,
+    apply_text_normalization: process.env.ELEVENLABS_NORMALIZE || 'auto',
+    ...(isV4
+      ? {
+          inputs: [{ text: text.slice(0, 1800), voice_id: voiceId }],
+          // v4 dialogue supports stability and similarity, not legacy style,
+          // speed, speaker boost, or the voice_settings envelope.
+          settings: { stability: settings.stability, similarity: settings.similarity_boost },
+        }
+      : {
+          text: stripAudioTags(text).slice(0, 1800),
+          voice_settings: settings,
+        }),
+  }
   const response = await fetch(
-    `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`,
+    isV4
+      ? 'https://api.elevenlabs.io/v1/text-to-dialogue'
+      : `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`,
     {
       method: 'POST',
       headers: {
@@ -169,14 +190,7 @@ async function synthElevenLabs({ text, voice, speaker, elevenVoiceId }) {
         'Content-Type': 'application/json',
         Accept: 'audio/mpeg',
       },
-      body: JSON.stringify({
-        text: text.slice(0, 1800),
-        model_id: model,
-        voice_settings: elevenVoiceSettings(speaker),
-        // 'auto' lets ElevenLabs expand numbers/symbols sensibly; call letters
-        // are already spaced upstream so they read letter by letter.
-        apply_text_normalization: process.env.ELEVENLABS_NORMALIZE || 'auto',
-      }),
+      body: JSON.stringify(body),
     },
   )
   if (!response.ok) {
@@ -199,7 +213,7 @@ export default async function handler(req, res) {
     return
   }
 
-  const provider = (process.env.VOICE_PROVIDER || 'openai').toLowerCase()
+  const provider = voiceProvider()
 
   try {
     const wantsElevenLabs = provider === 'elevenlabs' || provider === '11labs'
@@ -227,6 +241,7 @@ export default async function handler(req, res) {
     // Diagnostic: which TTS provider actually produced this audio. Lets us tell
     // a real ElevenLabs voice from a silent fallback to the OpenAI voice.
     res.setHeader('X-Voice-Provider', usedProvider)
+    if (usedProvider === 'elevenlabs') res.setHeader('X-Voice-Model', elevenModel())
     res.status(200).send(audio)
   } catch {
     res.status(204).end()

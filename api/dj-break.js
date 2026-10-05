@@ -1,3 +1,5 @@
+import { usesAudioTags, audioTagInstructions } from '../lib/voice-config.js'
+
 const breakKinds = ['intro', 'songTalk', 'newsWeather', 'commercial', 'bumper', 'caller']
 const speakers = ['dj', 'cohost', 'caller', 'reporter', 'imaging']
 
@@ -534,7 +536,8 @@ export default async function handler(req, res) {
           'showNotes is the running memory of this show: promises made, teases set up, and bits already started. Honor and pay off anything in it, and never contradict it.',
           'In showNote, return one short line worth remembering from THIS break (a promise, a tease, a running bit) or an empty string if nothing carries forward.',
           'Do not invent chart positions, dates, deaths, awards, or quotes unless the input makes them clear.',
-          'Say numbers and temperatures in spoken form. No markdown. No stage directions. No emoji.',
+          'Say numbers and temperatures in spoken form. No markdown. No emoji.',
+          usesAudioTags() ? audioTagInstructions : 'No stage directions or audio tags.',
           'The script field must be the segments joined in order.',
           lengthRule,
         ]

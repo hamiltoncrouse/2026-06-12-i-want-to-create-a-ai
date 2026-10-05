@@ -91,6 +91,8 @@ Set these environment variables in the Vercel project:
 OPENAI_API_KEY
 OPENAI_SCRIPT_MODEL=gpt-5.4-mini
 OPENAI_TTS_MODEL=gpt-4o-mini-tts
+VOICE_PROVIDER=elevenlabs
+ELEVENLABS_MODEL=eleven_v4
 ELEVENLABS_API_KEY
 ```
 
@@ -101,3 +103,22 @@ npx vercel --prod --yes
 ```
 
 The API key is only read by `/api/dj-break` and `/api/voice`; it is never sent to the browser.
+
+## Expressive voices
+
+Airbreak defaults to ElevenLabs `eleven_v4` through `/v1/text-to-dialogue`.
+Keep the existing ElevenLabs key (`ElevenKey` is also accepted), DJ/co-host
+voice IDs, and voice map. Generated scripts use sparse inline delivery tags,
+such as `[excited]` or `[curious]`; real listener-call transcripts stay verbatim.
+Tags are stripped for OpenAI and browser speech fallbacks.
+
+V4 requests preserve stability and similarity preferences using `settings`.
+Legacy speed, style, and speaker-boost settings are omitted because v4 does
+not support them. Explicit older-model overrides retain the legacy endpoint.
+`VOICE_PROVIDER=openai` still selects OpenAI and disables generated tags.
+Vercel environment changes require a new deployment; ensure an existing
+`VOICE_PROVIDER` override is `elevenlabs` before publishing.
+
+Verified against [Eleven v4 documentation](https://elevenlabs.io/docs/overview/capabilities/text-to-speech/eleven-v4)
+and the [dialogue API](https://elevenlabs.io/docs/api-reference/text-to-dialogue/convert).
+Run charge-free request/fallback checks with `node --test tests/voice.test.js`.
