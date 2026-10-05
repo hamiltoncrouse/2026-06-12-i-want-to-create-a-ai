@@ -33,6 +33,7 @@ export type Track = {
   requestTags?: string[]
   dayparts?: string[]
   weight?: number
+  version?: string
   metadataConfidence?: 'high' | 'medium' | 'low' | string
   // For live recordings (e.g. Grateful Dead shows): where and when it was taped.
   liveShow?: {
@@ -178,4 +179,10 @@ export type BreakPlan = {
   audioUrl?: string
   source: 'openai' | 'fallback'
   usageTipId?: string
+  broadcastId?: string
+  usedFactIds?: string[]
+  usedAnecdoteIds?: string[]
+  evidence?: { id: string; text: string; source: string; checkedAt: string }[]
+  researchCoverage?: string
+  qualityIssues?: string[]
 }

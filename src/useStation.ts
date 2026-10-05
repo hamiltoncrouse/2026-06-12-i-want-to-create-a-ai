@@ -1,3 +1,5 @@
+import { createStationMemory, matchesBackgroundBreak } from './stationMemory'
+import type { BackgroundBreak } from './stationMemory'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   breakSfxCategory,
@@ -206,6 +208,7 @@ function trackBrief(track?: Track) {
     requestTags: track.requestTags?.slice(0, 8),
     dayparts: track.dayparts?.slice(0, 4),
     metadataConfidence: track.metadataConfidence,
+    version: track.version,
     liveShow: track.liveShow,
   }
 }
@@ -269,7 +272,7 @@ export function useStation(
   // so it's ready to play through the song element when the track ends.
   const bgSongsRef = useRef(0)
   const bgCustomDueRef = useRef(false)
-  const bgBreakRef = useRef<string | null>(null)
+  const bgBreakRef = useRef<BackgroundBreak | null>(null)
   const bgGenRef = useRef(false)
   const sfxManifestRef = useRef<Record<string, string[]> | null>(null)
   const sfxRuntimeCacheRef = useRef<Map<string, Promise<string | null>>>(new Map())
@@ -297,6 +300,7 @@ export function useStation(
   const masterRef = useRef(1)
   const duckRef = useRef(1)
   const rampRef = useRef<number | null>(null)
+  const memoryStore = useRef(createStationMemory(() => window.localStorage))
   const recentScriptsRef = useRef<string[]>([])
   const showNotesRef = useRef<string[]>([])
   const recentTrackIdsRef = useRef<string[]>([])
@@ -319,6 +323,12 @@ export function useStation(
 
   useEffect(() => {
     djRef.current = dj
+    const saved = memoryStore.current.read(dj.id)
+    recentScriptsRef.current = saved.recentScripts
+    showNotesRef.current = saved.showNotes
+    preloadRef.current.clear()
+    if (bgBreakRef.current) URL.revokeObjectURL(bgBreakRef.current.url)
+    bgBreakRef.current = null
   }, [dj])
 
   useEffect(() => {
@@ -833,14 +843,33 @@ export function useStation(
     }
   }, [])
 
-  const speakFallback = useCallback((text: string) => {
+  const rememberAired = useCallback((djId: string, plan: BreakPlan) => {
+    const saved = memoryStore.current.record(djId, plan)
+    if (djRef.current.id === djId) {
+      recentScriptsRef.current = saved.recentScripts
+      showNotesRef.current = saved.showNotes
+    }
+  }, [])
+
+  const clearDjMemory = useCallback(() => {
+    memoryStore.current.clear(djRef.current.id)
+    recentScriptsRef.current = []
+    showNotesRef.current = []
+    preloadRef.current.clear()
+    if (bgBreakRef.current) URL.revokeObjectURL(bgBreakRef.current.url)
+    bgBreakRef.current = null
+    setStatus('DJ memory cleared on this device')
+  }, [])
+
+  const speakFallback = useCallback((text: string, onStarted?: () => void) => {
     return new Promise<void>((resolve) => {
       if (!('speechSynthesis' in window)) {
         globalThis.setTimeout(resolve, 1200)
         return
       }
       window.speechSynthesis.cancel()
-      const utterance = new SpeechSynthesisUtterance(text.replace(/\[[^\]\r\n]*\]/g, '').replace(/ {2,}/g, ' ').trim())
+      const utterance = new SpeechSynthesisUtterance(text.replace(/\[[^\]]*(?:\]|$)/g, '').replace(/[[\]]/g, '').replace(/ {2,}/g, ' ').trim())
+      utterance.onstart = () => onStarted?.()
       utterance.rate = 0.98
       utterance.pitch = 1
       utterance.onend = () => resolve()
@@ -850,14 +879,15 @@ export function useStation(
   }, [])
 
   const playAudioUrl = useCallback(
-    (url: string, onNearEnd?: () => void) => {
+    (url: string, onNearEnd?: () => void, onStarted?: () => void) => {
       return new Promise<void>((resolve) => {
         const audio = getBreakAudio()
         // Mobile browsers suspend the Web Audio context on screen lock; wake
         // it up so the voice is audible, not silently routed into a dead graph.
         audioCtxRef.current?.resume().catch(() => undefined)
-        audio.onended = () => resolve()
-        audio.onerror = () => resolve()
+        audio.onplaying = () => onStarted?.()
+        audio.onended = () => { audio.onplaying = null; resolve() }
+        audio.onerror = () => { audio.onplaying = null; resolve() }
         audio.ontimeupdate = () => {
           const remaining = audio.duration - audio.currentTime
           if (Number.isFinite(remaining) && remaining <= TALKUP_OVERLAP_S) onNearEnd?.()
@@ -866,7 +896,7 @@ export function useStation(
         audio.volume = masterRef.current
         audio.src = url
         audio.load()
-        audio.play().catch(() => resolve())
+        audio.play().catch(() => { audio.onplaying = null; resolve() })
       })
     },
     [getBreakAudio],
@@ -977,7 +1007,7 @@ export function useStation(
   )
 
   const playPlanAudio = useCallback(
-    async (plan: BreakPlan, onNearEnd: () => void) => {
+    async (plan: BreakPlan, onNearEnd: () => void, onStarted?: () => void) => {
       const voiced: BreakSegment[] = (plan.segments || []).filter((segment) => segment.audioUrl)
       if (!voiced.length && plan.audioUrl) {
         voiced.push({ speaker: 'dj', text: plan.script, audioUrl: plan.audioUrl })
@@ -1019,7 +1049,7 @@ export function useStation(
           (words / SPOKEN_WORDS_PER_SECOND - TALKUP_OVERLAP_S) * 1000,
         )
         const overlapTimer = window.setTimeout(onNearEnd, overlapDelay)
-        await speakFallback(plan.script)
+        await speakFallback(plan.script, onStarted)
         window.clearTimeout(overlapTimer)
         return
       }
@@ -1041,7 +1071,7 @@ export function useStation(
         }
         setVoiceEffect(voiced[i].speaker)
         const isLast = i === voiced.length - 1
-        await playAudioUrl(voiced[i].audioUrl as string, isLast ? onNearEnd : undefined)
+        await playAudioUrl(voiced[i].audioUrl as string, isLast ? onNearEnd : undefined, onStarted)
       }
       setVoiceEffect('dj')
     },
@@ -1070,6 +1100,7 @@ export function useStation(
           speaker: 'dj',
           style: activeDj.style,
           elevenVoiceId: activeDj.elevenVoice,
+          djId: activeDj.id,
         }),
       })
       if (!voiceResponse.ok || !voiceResponse.headers.get('content-type')?.includes('audio')) {
@@ -1123,6 +1154,7 @@ export function useStation(
               speaker: 'dj',
               style: activeDj.style,
               elevenVoiceId: activeDj.elevenVoice,
+              djId: activeDj.id,
             }),
           })
           if (response.ok && response.headers.get('content-type')?.includes('audio')) {
@@ -1157,6 +1189,7 @@ export function useStation(
           kind: 'songTalk',
           previousTrack: trackBrief(previousTrack),
           nextTrack: trackBrief(nextTrack),
+          continuity: memoryStore.current.read(activeDj.id),
           recentScripts: recentScriptsRef.current,
           showNotes: showNotesRef.current,
         }),
@@ -1169,7 +1202,6 @@ export function useStation(
           ? plan.segments.map((segment) => segment.text).filter(Boolean).join(' ')
           : plan.script) || ''
       if (!script.trim()) return
-      recentScriptsRef.current = [...recentScriptsRef.current, script].slice(-3)
       const tokens = callLetterTokens(activeDj)
       const voiceResponse = await fetch('/api/voice', {
         method: 'POST',
@@ -1180,11 +1212,14 @@ export function useStation(
           speaker: 'dj',
           style: activeDj.style,
           elevenVoiceId: activeDj.elevenVoice,
+          djId: activeDj.id,
         }),
       })
       if (voiceResponse.ok && voiceResponse.headers.get('content-type')?.includes('audio')) {
-        if (bgBreakRef.current) URL.revokeObjectURL(bgBreakRef.current)
-        bgBreakRef.current = URL.createObjectURL(await voiceResponse.blob())
+        const url = URL.createObjectURL(await voiceResponse.blob())
+        if (djRef.current.id !== activeDj.id || stopRef.current) { URL.revokeObjectURL(url); return }
+        if (bgBreakRef.current) URL.revokeObjectURL(bgBreakRef.current.url)
+        bgBreakRef.current = { url, plan, djId: activeDj.id, previousTrackId: previousTrack?.id || '', nextTrackId: nextTrack?.id || '' }
       }
     } catch {
       // No customized break this round; we'll fall back to a quick liner.
@@ -1396,6 +1431,7 @@ export function useStation(
       usageTip?.id || 'no-tip',
       steeringKey,
       djRef.current.id,
+      memoryStore.current.read(djRef.current.id).airedCount,
     ].join(':')
     const existing = preloadRef.current.get(key)
     if (existing) return existing
@@ -1456,6 +1492,7 @@ export function useStation(
               : undefined,
             steering: steeringRef.current,
             usageTip,
+            continuity: memoryStore.current.read(activeDj.id),
             recentScripts: recentScriptsRef.current,
             showNotes: showNotesRef.current,
           }),
@@ -1549,6 +1586,7 @@ export function useStation(
               speaker: segment.speaker,
               style,
               elevenVoiceId,
+              djId: activeDj.id,
             }),
           })
           if (voiceResponse.ok && voiceResponse.headers.get('content-type')?.includes('audio')) {
@@ -1776,20 +1814,23 @@ export function useStation(
   // song element, then roll into the next song. This is what runs in place of a
   // live break while the screen is locked.
   const playBackgroundLiner = useCallback(
-    (index: number, count: number, clip?: string) => {
+    (index: number, count: number, clip?: BackgroundBreak) => {
       const liners = bgLinersRef.current
-      const url = clip || (liners.length ? liners[Math.floor(Math.random() * liners.length)] : '')
+      const url = clip?.url || (liners.length ? liners[Math.floor(Math.random() * liners.length)] : '')
       if (!url) {
         segueToSong(index, count)
         return
       }
       const audio = getSongAudio()
       const goNext = () => {
+        audio.onplaying = null
+        if (clip) URL.revokeObjectURL(clip.url)
         if (stopRef.current) return
         songsSinceBreakRef.current = 1
         segueToSong(index, count)
       }
       audio.ontimeupdate = null
+      audio.onplaying = () => { if (clip) rememberAired(clip.djId, clip.plan) }
       audio.onended = goNext
       audio.onerror = goNext
       audio.loop = false
@@ -1800,7 +1841,7 @@ export function useStation(
       setStatus('On air')
       audio.play().catch(goNext)
     },
-    [applyVolumes, getSongAudio, segueToSong],
+    [applyVolumes, getSongAudio, segueToSong, rememberAired],
   )
 
   const playBreakThenSong = useCallback(
@@ -1808,11 +1849,13 @@ export function useStation(
       const activeTracks = tracksRef.current
       if (!activeTracks.length || stopRef.current) return
 
+      const airingDjId = djRef.current.id
       const breakKind = resolveKind()
       phaseRef.current = 'loading'
       setMode('loading')
       setStatus('Cueing the mic')
       const breakPlan = await requestBreakForAir(index, breakKind, previousIndex)
+      breakPlan.broadcastId ??= crypto.randomUUID()
       if (stopRef.current) return
       if (breakPlan.title !== 'Standby liner') {
         const airedRequestIds = listenerRequestsRef.current.slice(0, 3).map((request) => request.id)
@@ -1827,10 +1870,6 @@ export function useStation(
       setMode('break')
       setStatus('On the mic')
       setNowScript(breakPlan.script)
-      recentScriptsRef.current = [...recentScriptsRef.current, breakPlan.script].slice(-3)
-      if (breakPlan.showNote?.trim()) {
-        showNotesRef.current = [...showNotesRef.current, breakPlan.showNote.trim()].slice(-8)
-      }
       breakSeqRef.current += 1
       setBreakSeq(breakSeqRef.current)
       setBreakLog((prev) =>
@@ -1871,7 +1910,7 @@ export function useStation(
       }
       bed.play().catch(() => undefined)
 
-      await playPlanAudio(breakPlan, startSongUnder)
+      await playPlanAudio(breakPlan, startSongUnder, () => rememberAired(airingDjId, breakPlan))
       if (stopRef.current) return
 
       startSongUnder()
@@ -1880,7 +1919,7 @@ export function useStation(
       setStatus('On air')
       rampDuck(1, SWELL_MS)
     },
-    [beginSong, getSongAudio, playPlanAudio, prepareNext, rampDuck, requestBreakForAir, resolveKind],
+    [beginSong, getSongAudio, playPlanAudio, prepareNext, rampDuck, requestBreakForAir, resolveKind, rememberAired],
   )
 
   useEffect(() => {
@@ -1943,7 +1982,12 @@ export function useStation(
             bgCustomDueRef.current = false
             const clip = bgBreakRef.current
             bgBreakRef.current = null
-            playBackgroundLiner(nextIndex, nextCount, clip)
+            if (matchesBackgroundBreak(clip, djRef.current.id, finishedTrack?.id, tracksRef.current[nextIndex]?.id)) {
+              playBackgroundLiner(nextIndex, nextCount, clip)
+            } else {
+              URL.revokeObjectURL(clip.url)
+              playBackgroundLiner(nextIndex, nextCount)
+            }
           } else {
             playBackgroundLiner(nextIndex, nextCount)
           }
@@ -2118,8 +2162,9 @@ export function useStation(
     songsSinceBreakRef.current = 0
     bgSongsRef.current = 0
     bgCustomDueRef.current = false
-    recentScriptsRef.current = []
-    showNotesRef.current = []
+    const savedMemory = memoryStore.current.read(djRef.current.id)
+    recentScriptsRef.current = savedMemory.recentScripts
+    showNotesRef.current = savedMemory.showNotes
     passPlayedRef.current.clear()
     void (async () => {
       const startIndex = await findPlayableIndex(indexRef.current)
@@ -2308,6 +2353,7 @@ export function useStation(
 
   return {
     tracks,
+    clearDjMemory,
     cueTrack,
     setCallDucking,
     setLibrary,

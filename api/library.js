@@ -72,6 +72,7 @@ function liveShowMetadata(item) {
 function trackMetadata(item) {
   if (!item || typeof item !== 'object') return {}
   const metadata = {}
+  if (item.version) metadata.version = optionalString(item.version, 80)
   const album = optionalString(item.album, 120)
   const tempo = optionalString(item.tempo, 24)
   const djNotes = optionalString(item.djNotes, 240)

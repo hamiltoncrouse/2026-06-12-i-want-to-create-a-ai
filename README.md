@@ -108,8 +108,11 @@ The API key is only read by `/api/dj-break` and `/api/voice`; it is never sent t
 
 Airbreak defaults to ElevenLabs `eleven_v4` through `/v1/text-to-dialogue`.
 Keep the existing ElevenLabs key (`ElevenKey` is also accepted), DJ/co-host
-voice IDs, and voice map. Generated scripts use sparse inline delivery tags,
-such as `[excited]` or `[curious]`; real listener-call transcripts stay verbatim.
+voice IDs, and voice map. Generated scripts use sparse character-specific delivery tags. Dex stays measured
+and warm (one tag per break); Rex can be more animated. Host, co-host, caller,
+reporter and imaging roles have separate limits. Unknown/custom DJs default to
+restrained delivery. The writer and voice endpoint both enforce allowed tags;
+real listener-call transcripts stay verbatim.
 Tags are stripped for OpenAI and browser speech fallbacks.
 
 V4 requests preserve stability and similarity preferences using `settings`.
@@ -122,3 +125,53 @@ Vercel environment changes require a new deployment; ensure an existing
 Verified against [Eleven v4 documentation](https://elevenlabs.io/docs/overview/capabilities/text-to-speech/eleven-v4)
 and the [dialogue API](https://elevenlabs.io/docs/api-reference/text-to-dialogue/convert).
 Run charge-free request/fallback checks with `node --test tests/voice.test.js`.
+
+
+## Reviewed patter and show continuity
+
+The writer keeps `gpt-5.4-mini` by default. Intro/song-talk material comes from
+`lib/song-cards.js` and `lib/persona-canon.js`. The starter cache has eight
+reviewed songs with official source links and review dates. Matching requires
+exact artist/title identity; low-confidence metadata gets no card. Work-level
+facts may apply to other performances, but recording-specific cues additionally
+require matching album and `version: "original studio recording"`, with no live
+show or alternate-version marker. Missing coverage gets natural transitions,
+not made-up trivia. Playlist `facts` and `djNotes` are not treated as research.
+
+`GET /api/song-card?artist=...&title=...` is a cacheable on-demand lookup of
+these reviewed cards, not an automatic research or paid generation service.
+New coverage requires reviewing sources and adding cards. The writer receives
+at most one selected fact, listening cue, or fictional life bit and returns a
+placeholder; the server inserts its approved wording and exposes source links
+in the break log. A conservative rule-based screen rejects common unsupported
+history/biography patterns in music patter; it is not a semantic fact verifier.
+
+Fourteen fictional hosts have three stable life/callback items each. A callback
+is available only after its prerequisite story aired. Johnny London and Sir Paul
+receive no invented autobiographical canon. Recent scripts and used material IDs
+persist per DJ, per browser/device for sixty days; the Station tab can clear one
+DJ's memory. Blocked storage falls back to session memory. Memory records when
+a break actually starts playing, not when it is generated; an interrupted break
+may therefore count as used. Foreground and background playback share this path,
+and stale background breaks are rejected when DJ or track context differs.
+This does not synchronize memory across devices.
+
+Run charge-free checks:
+
+```bash
+npm test
+npm run lint
+npm run build
+```
+
+An optional, bounded text-only model comparison uses the same real prompt for
+Dex and Rex, with four generations total and no audio:
+
+```bash
+OPENAI_API_KEY=<existing-key> CANDIDATE_MODEL=<available-model-id> node scripts/compare-patter.mjs --run
+```
+
+The script checks account model availability and writes `patter-comparison.json`
+with outputs, latency, usage, and a blank human-scoring rubric. Do not change the
+production writer model without comparing accuracy, warmth, specificity,
+repetition and character fit. No comparison is implied by the automated tests.

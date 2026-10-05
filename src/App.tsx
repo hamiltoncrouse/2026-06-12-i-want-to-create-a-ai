@@ -715,6 +715,7 @@ function App() {
             speaker: 'dj',
             style: dj.style,
             elevenVoiceId: dj.elevenVoice,
+            djId: dj.id,
           }),
         })
         if (!response.ok || !response.headers.get('content-type')?.includes('audio')) return
@@ -1108,6 +1109,7 @@ function App() {
           voice: draftDj.voice,
           speaker: 'dj',
           style: draftDj.style,
+          djId: draftDj.id,
         }),
       })
       if (!response.ok || !response.headers.get('content-type')?.includes('audio')) {
@@ -2235,6 +2237,11 @@ function App() {
         {tab === 'station' && (
           <section className="view" key="station">
             <h2 className="viewTitle">Station</h2>
+            <div className="infoCard">
+              <h3>{selectedDj.name}&apos;s show memory</h3>
+              <p>Remembers recent broadcasts and avoids repeating stories on this device for up to sixty days. If browser storage is unavailable, memory lasts for this session.</p>
+              <button type="button" className="freqChip" onClick={station.clearDjMemory}>Clear this DJ&apos;s memory</button>
+            </div>
             {selectedDj.venue ? (
               <>
                 <div className="infoCard">
@@ -2392,6 +2399,9 @@ function App() {
                     <span>{entry.at}</span>
                   </div>
                   <p>{entry.script}</p>
+                  {entry.evidence?.map((fact) => (
+                    <a key={fact.id} href={fact.source} target="_blank" rel="noreferrer">Song note source</a>
+                  ))}
                 </div>
               ))}
             </div>

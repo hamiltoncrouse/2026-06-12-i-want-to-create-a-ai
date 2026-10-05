@@ -1,3 +1,4 @@
+import { constrainAudioTags } from '../lib/character-delivery.js'
 import { elevenModel, voiceProvider, stripAudioTags } from '../lib/voice-config.js'
 
 const voices = new Set([
@@ -157,7 +158,7 @@ function elevenKey() {
   )
 }
 
-async function synthElevenLabs({ text, voice, speaker, elevenVoiceId }) {
+async function synthElevenLabs({ text, voice, speaker, elevenVoiceId, djId }) {
   const apiKey = elevenKey()
   if (!apiKey) return null
   const voiceId = elevenVoiceId || mapVoiceToEleven(voice)
@@ -169,7 +170,7 @@ async function synthElevenLabs({ text, voice, speaker, elevenVoiceId }) {
     apply_text_normalization: process.env.ELEVENLABS_NORMALIZE || 'auto',
     ...(isV4
       ? {
-          inputs: [{ text: text.slice(0, 1800), voice_id: voiceId }],
+          inputs: [{ text: constrainAudioTags(text, djId, speaker).slice(0, 1800), voice_id: voiceId }],
           // v4 dialogue supports stability and similarity, not legacy style,
           // speed, speaker boost, or the voice_settings envelope.
           settings: { stability: settings.stability, similarity: settings.similarity_boost },
@@ -207,7 +208,7 @@ export default async function handler(req, res) {
     return
   }
 
-  const { text, voice, style, speaker, elevenVoiceId } = req.body || {}
+  const { text, voice, style, speaker, elevenVoiceId, djId } = req.body || {}
   if (!text || typeof text !== 'string') {
     res.status(400).json({ error: 'Missing text' })
     return
@@ -220,7 +221,7 @@ export default async function handler(req, res) {
     let usedProvider = 'openai'
     let audio = null
     if (wantsElevenLabs) {
-      audio = await synthElevenLabs({ text, voice, speaker, elevenVoiceId })
+      audio = await synthElevenLabs({ text, voice, speaker, elevenVoiceId, djId })
       if (audio) {
         usedProvider = 'elevenlabs'
       } else {

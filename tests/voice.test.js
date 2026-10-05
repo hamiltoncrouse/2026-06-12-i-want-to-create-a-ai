@@ -4,7 +4,7 @@ import handler from '../api/voice.js'
 import { usesAudioTags } from '../lib/voice-config.js'
 const env = { ...process.env }, fetchBefore = globalThis.fetch, warnBefore = console.warn
 afterEach(() => { process.env = { ...env }; globalThis.fetch = fetchBefore; console.warn = warnBefore })
-async function request(overrides = {}, fail = false) {
+async function request(overrides = {}, fail = false, bodyOverrides = {}) {
   process.env.ELEVENLABS_API_KEY = 'test-key'; process.env.OPENAI_API_KEY = 'test-key'
   delete process.env.VOICE_PROVIDER; delete process.env.ELEVENLABS_MODEL
   Object.assign(process.env, overrides)
@@ -15,7 +15,7 @@ async function request(overrides = {}, fail = false) {
   }
   console.warn = () => {}
   const res = { headers: {}, setHeader(k, v) { this.headers[k] = v }, status(n) { this.code = n; return this }, send() {}, end() {}, json() {} }
-  await handler({ method: 'POST', body: { text: '[excited] Welcome back! [laughing] What a song.', voice: 'ash', elevenVoiceId: 'existing-custom-voice', speaker: 'dj' } }, res)
+  await handler({ method: 'POST', body: { text: '[excited] Welcome back! [laughing] What a song.', voice: 'ash', elevenVoiceId: 'existing-custom-voice', speaker: 'dj', djId: 'blaze-morning-crew', ...bodyOverrides } }, res)
   return { calls, res }
 }
 test('v4 preserves selected voice and tags using supported dialogue settings', async () => {
@@ -43,4 +43,9 @@ test('OpenAI fallback strips tags and preserves voice', async () => {
 test('explicit OpenAI provider disables generated tags', async () => {
   const { calls } = await request({ VOICE_PROVIDER: 'openai' })
   assert.equal(calls.length, 1); assert.match(calls[0].url, /openai/); assert.equal(usesAudioTags(), false)
+})
+
+test('voice endpoint independently rejects hype for Dex even if writer validation is bypassed', async () => {
+  const { calls } = await request({}, false, { djId: 'dex-monroe', text: '[excited] Hello [warm] friend [shouting] tonight.' })
+  assert.equal(calls[0].body.inputs[0].text, 'Hello [warm] friend tonight.')
 })
