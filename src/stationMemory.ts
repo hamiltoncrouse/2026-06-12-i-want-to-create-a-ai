@@ -61,3 +61,15 @@ export type BackgroundBreak = { url: string; plan: BreakPlan; djId: string; prev
 export function matchesBackgroundBreak(clip: BackgroundBreak, djId: string, previousTrackId?: string, nextTrackId?: string) {
   return clip.djId === djId && clip.previousTrackId === previousTrackId && clip.nextTrackId === nextTrackId
 }
+
+// Rendered preset profiles are fresh objects. Only a changed profile should
+// invalidate expensive prepared audio; progress/status renders must retain it.
+export function createDjProfileChangeDetector() {
+  let previous: string | undefined
+  return (profile: unknown) => {
+    const current = JSON.stringify(profile)
+    if (current === previous) return false
+    previous = current
+    return true
+  }
+}

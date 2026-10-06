@@ -1,4 +1,4 @@
-import { createStationMemory, matchesBackgroundBreak } from './stationMemory'
+import { createStationMemory, matchesBackgroundBreak, createDjProfileChangeDetector } from './stationMemory'
 import type { BackgroundBreak } from './stationMemory'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
@@ -301,6 +301,7 @@ export function useStation(
   const duckRef = useRef(1)
   const rampRef = useRef<number | null>(null)
   const memoryStore = useRef(createStationMemory(() => window.localStorage))
+  const djProfileChanged = useRef(createDjProfileChangeDetector())
   const recentScriptsRef = useRef<string[]>([])
   const showNotesRef = useRef<string[]>([])
   const recentTrackIdsRef = useRef<string[]>([])
@@ -323,6 +324,7 @@ export function useStation(
 
   useEffect(() => {
     djRef.current = dj
+    if (!djProfileChanged.current(dj)) return
     const saved = memoryStore.current.read(dj.id)
     recentScriptsRef.current = saved.recentScripts
     showNotesRef.current = saved.showNotes
@@ -1691,6 +1693,12 @@ export function useStation(
 
       void (async () => {
         const nextIndex = await promise
+        // Use the same probed/steered successor that advance() will play.
+        // Guessing index + 1 produces a stale custom break when that track is
+        // unavailable or steering chooses another song.
+        if (document.hidden && bgCustomDueRef.current) {
+          void prepareBackgroundBreak(index, nextIndex)
+        }
         const songsUntilBreak = Math.max(0, breakEveryRef.current - songsSinceBreakRef.current)
         const breakKind = resolveKind()
         if (songsUntilBreak === 0) {
@@ -1706,7 +1714,7 @@ export function useStation(
         }
       })()
     },
-    [findPlayableIndex, findPlayableSequence, requestBreak, resolveKind],
+    [findPlayableIndex, findPlayableSequence, requestBreak, resolveKind, prepareBackgroundBreak],
   )
 
   const updateMediaSession = useCallback((track: Track) => {
@@ -1777,8 +1785,6 @@ export function useStation(
         bgSongsRef.current += 1
         if (bgSongsRef.current % BG_CUSTOM_EVERY === 0) {
           bgCustomDueRef.current = true
-          const len = Math.max(1, tracksRef.current.length)
-          void prepareBackgroundBreak(index, (index + 1) % len)
         } else {
           bgCustomDueRef.current = false
         }
@@ -1792,7 +1798,7 @@ export function useStation(
         // Optional hint for lock-screen controls.
       }
     },
-    [applyVolumes, getSongAudio, prepareBackgroundBreak, updateMediaSession],
+    [applyVolumes, getSongAudio, updateMediaSession],
   )
 
   const segueToSong = useCallback(

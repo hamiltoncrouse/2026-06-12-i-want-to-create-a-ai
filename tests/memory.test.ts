@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { createStationMemory, matchesBackgroundBreak } from '../src/stationMemory.ts'
+import { createStationMemory, matchesBackgroundBreak, createDjProfileChangeDetector } from '../src/stationMemory.ts'
 import type { BreakPlan } from '../src/types.ts'
 const plan: BreakPlan = { kind: 'songTalk', title: 'Test', script: 'Hello friend.', tease: '', source: 'openai', broadcastId: 'one', usedFactIds: ['fact-1'], usedAnecdoteIds: ['life-1'], showNote: 'An actual aired note' }
 const map = () => { const data = new Map<string, string>(); return { getItem: (k: string) => data.get(k) || null, setItem: (k: string, v: string) => { data.set(k, v) }, removeItem: (k: string) => { data.delete(k) } } }
@@ -39,4 +39,23 @@ test('old history expires and history size stays bounded', () => {
   assert.equal(memory.read('dex').recentScripts.length, 12); assert.equal(memory.read('dex').usedFactIds.length, 100)
   now += 61 * 86400000
   assert.equal(createStationMemory(() => storage, () => now).read('dex').airedCount, 0)
+})
+
+test('progress renders retain prepared audio; actual DJ edits and switches invalidate it', () => {
+  const changed = createDjProfileChangeDetector()
+  const profile = { id: 'dex', voice: 'onyx', coHost: { voice: 'sage' } }
+  assert(changed(profile))
+  const readyBreaks = new Map([['next', Promise.resolve('custom voiced break')]])
+  let backgroundUrl: string | null = 'blob:custom'
+  const sync = (dj: typeof profile) => {
+    if (changed(dj)) { readyBreaks.clear(); backgroundUrl = null }
+  }
+  // App builds fresh preset and nested override objects on ordinary renders.
+  for (let frame = 0; frame < 100; frame++) sync(structuredClone(profile))
+  assert.equal(readyBreaks.size, 1)
+  assert.equal(backgroundUrl, 'blob:custom')
+  sync({ ...profile, coHost: { voice: 'coral' } })
+  assert.equal(readyBreaks.size, 0)
+  assert.equal(backgroundUrl, null)
+  assert(changed({ ...profile, id: 'rex' }))
 })
