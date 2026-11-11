@@ -1489,7 +1489,7 @@ function App() {
                   value={requestDraft}
                   onChange={(event) => setRequestDraft(event.target.value)}
                   onKeyDown={(event) => event.key === 'Enter' && submitRequest()}
-                  placeholder="Ask for a song, dedication, or shout-out"
+                  placeholder="Request a song or shout-out"
                   aria-label="Request line message"
                   maxLength={220}
                 />
