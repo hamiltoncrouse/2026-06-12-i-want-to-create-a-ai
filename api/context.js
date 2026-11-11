@@ -27,9 +27,34 @@ const weatherCodes = {
   99: 'thunderstorms with hail',
 }
 
-function extractRssTitles(xml, limit) {
+// Upstream feeds are best-effort colour; never let a slow one hang the show.
+const UPSTREAM_TIMEOUT_MS = 6000
+const upstream = () => AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)
+
+const xmlEntities = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' }
+
+// Headlines are read aloud, so "&#39;" or "&quot;" must not reach the script.
+export function decodeEntities(text) {
+  return text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (whole, entity) => {
+    if (entity[0] !== '#') return xmlEntities[entity.toLowerCase()] ?? whole
+    const code =
+      entity[1].toLowerCase() === 'x' ? parseInt(entity.slice(2), 16) : parseInt(entity.slice(1), 10)
+    try {
+      return String.fromCodePoint(code)
+    } catch {
+      return ''
+    }
+  })
+}
+
+export function extractRssTitles(xml, limit) {
   return [...xml.matchAll(/<title><!\[CDATA\[(.*?)\]\]><\/title>|<title>(.*?)<\/title>/g)]
-    .map((match) => (match[1] || match[2] || '').replace(/&amp;/g, '&').trim())
+    .map((match) =>
+      // Feeds double-escape ("&amp;#39;"), so decode twice.
+      decodeEntities(decodeEntities(match[1] || match[2] || ''))
+        .replace(/\s+/g, ' ')
+        .trim(),
+    )
     .filter(Boolean)
     .filter((title) => !title.includes('Google News'))
     .slice(0, limit)
@@ -59,7 +84,7 @@ function parseCity(city) {
 async function getCoordinates(city) {
   const { name, region } = parseCity(city)
   const params = new URLSearchParams({ name, count: '10', language: 'en', format: 'json' })
-  const response = await fetch(`https://geocoding-api.open-meteo.com/v1/search?${params}`)
+  const response = await fetch(`https://geocoding-api.open-meteo.com/v1/search?${params}`, { signal: upstream() })
   if (!response.ok) return null
   const data = await response.json()
   const results = data.results || []
@@ -95,7 +120,7 @@ async function getWeather(coordinates) {
     temperature_unit: 'fahrenheit',
     wind_speed_unit: 'mph',
   })
-  const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`)
+  const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`, { signal: upstream() })
   if (!response.ok) return 'Weather unavailable'
   const data = await response.json()
   const current = data.current
@@ -117,7 +142,10 @@ async function getWeather(coordinates) {
 
 async function fetchRss(url, limit) {
   try {
-    const response = await fetch(url, { headers: { 'User-Agent': 'Airbreak AI DJ/1.0' } })
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'Airbreak AI DJ/1.0' },
+      signal: upstream(),
+    })
     if (!response.ok) return []
     return extractRssTitles(await response.text(), limit)
   } catch {
@@ -172,7 +200,10 @@ async function getCityFacts(coordinates, city) {
   try {
     const response = await fetch(
       `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(pageName)}`,
-      { headers: { 'User-Agent': 'Airbreak AI DJ/1.0', Accept: 'application/json' } },
+      {
+        headers: { 'User-Agent': 'Airbreak AI DJ/1.0', Accept: 'application/json' },
+        signal: upstream(),
+      },
     )
     if (!response.ok) return ''
     const data = await response.json()
@@ -184,14 +215,22 @@ async function getCityFacts(coordinates, city) {
   }
 }
 
+function safeDecode(value) {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
 // Vercel forwards the caller's IP geolocation; use it when no city is chosen
 // so the station is local to the listener by default.
 function detectListenerCity(req) {
   const rawCity = req.headers['x-vercel-ip-city']
   if (!rawCity || typeof rawCity !== 'string') return null
-  const cityName = decodeURIComponent(rawCity)
+  const cityName = safeDecode(rawCity)
   const rawRegion = req.headers['x-vercel-ip-country-region']
-  const region = typeof rawRegion === 'string' ? decodeURIComponent(rawRegion) : ''
+  const region = typeof rawRegion === 'string' ? safeDecode(rawRegion) : ''
   return {
     city: region ? `${cityName}, ${region}` : cityName,
     timezone:
@@ -203,17 +242,20 @@ function detectListenerCity(req) {
 
 export default async function handler(req, res) {
   const requested =
-    typeof req.query.city === 'string' ? req.query.city.replace(/\+/g, ' ').trim() : ''
+    typeof req.query.city === 'string'
+      ? req.query.city.replace(/\+/g, ' ').trim().slice(0, 120)
+      : ''
   const detected = !requested || requested === 'auto' ? detectListenerCity(req) : null
   const city = detected?.city || (requested && requested !== 'auto' ? requested : 'New York, NY')
 
   try {
-    const coordinates = await getCoordinates(city)
+    // A geocoder outage should cost the weather, not the headlines too.
+    const coordinates = await getCoordinates(city).catch(() => null)
     // Use the geocoder's canonical "City, State" so news feeds disambiguate
     // places like Norwich, Connecticut from Norwich, England.
     const place = coordinates?.name || city
     const [weather, headlines, national, world, sports, facts] = await Promise.all([
-      getWeather(coordinates),
+      getWeather(coordinates).catch(() => 'Weather unavailable'),
       getHeadlines(place),
       topicFeed('NATION', 4),
       topicFeed('WORLD', 4),

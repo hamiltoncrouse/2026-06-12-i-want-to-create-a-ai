@@ -1,6 +1,10 @@
 // Read-only helper: lists the ElevenLabs voices saved in the account (name +
 // id) so a DJ can be pointed at the right voice without hunting for the ID.
-// Key-gated; only ever returns voice names and their public IDs.
+// Key-gated; only ever returns voice names and their public IDs. The ?detail=
+// and ?probe= diagnostics are operator-only (see lib/admin.js): probing runs
+// several paid synthesis calls per request.
+
+import { rejectNonAdmin } from '../lib/admin.js'
 
 function elevenKey() {
   return (
@@ -22,10 +26,11 @@ export default async function handler(req, res) {
   // samples/high_quality_base_model_ids) so we can see why it might fail.
   const detailId = req.query && req.query.detail
   if (detailId) {
+    if (rejectNonAdmin(req, res)) return
     try {
       const r = await fetch(
         `https://api.elevenlabs.io/v1/voices/${encodeURIComponent(detailId)}`,
-        { headers: { 'xi-api-key': apiKey } },
+        { headers: { 'xi-api-key': apiKey }, signal: AbortSignal.timeout(15000) },
       )
       const body = await r.text().catch(() => '')
       res.setHeader('Cache-Control', 'no-store')
@@ -39,6 +44,7 @@ export default async function handler(req, res) {
   // what the ElevenLabs website does) and reports which, if any, succeed.
   const probeId = req.query && req.query.probe
   if (probeId) {
+    if (rejectNonAdmin(req, res)) return
     const strategies = [
       { name: 'turbo+text', url: `text-to-speech/${encodeURIComponent(probeId)}`, body: { text: 'probe test one two', model_id: 'eleven_turbo_v2_5' } },
       { name: 'multilingual+text', url: `text-to-speech/${encodeURIComponent(probeId)}`, body: { text: 'probe test one two', model_id: 'eleven_multilingual_v2' } },
@@ -53,6 +59,7 @@ export default async function handler(req, res) {
           method: 'POST',
           headers: { 'xi-api-key': apiKey, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
           body: JSON.stringify(s.body),
+          signal: AbortSignal.timeout(20000),
         })
         const detail = r.ok ? '' : (await r.text().catch(() => '')).slice(0, 300)
         results.push({ strategy: s.name, status: r.status, ok: r.ok, detail })
@@ -67,6 +74,7 @@ export default async function handler(req, res) {
   try {
     const response = await fetch('https://api.elevenlabs.io/v1/voices', {
       headers: { 'xi-api-key': apiKey },
+      signal: AbortSignal.timeout(15000),
     })
     if (!response.ok) {
       res.status(502).json({ error: `Voices API returned ${response.status}` })

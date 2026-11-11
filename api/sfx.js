@@ -51,6 +51,7 @@ export default async function handler(req, res) {
         'Content-Type': 'application/json',
         Accept: 'audio/mpeg',
       },
+      signal: AbortSignal.timeout(25000),
       body: JSON.stringify({
         text: prompt.slice(0, MAX_PROMPT),
         duration_seconds: duration,

@@ -104,6 +104,24 @@ npx vercel --prod --yes
 
 The API key is only read by `/api/dj-break` and `/api/voice`; it is never sent to the browser.
 
+## Operator tools
+
+Two server tools spend paid ElevenLabs credits and are not used by the listener
+app, so they are disabled unless `AIRBREAK_ADMIN_TOKEN` is set, and then only
+answer requests that send the same value in an `x-admin-token` header:
+
+- `POST /api/music` — generate a jingle or sting.
+- `GET /api/voices?probe=<voiceId>` and `?detail=<voiceId>` — voice diagnostics.
+
+```bash
+curl -H "x-admin-token: $AIRBREAK_ADMIN_TOKEN" "https://your-app.vercel.app/api/voices?probe=VOICE_ID"
+```
+
+Plain `GET /api/voices` (voice names and IDs) stays open.
+
+The music-source scanner (`/api/library`) only fetches public `http(s)`
+addresses; `localhost` and private-network hosts are refused.
+
 ## Expressive voices
 
 Airbreak defaults to ElevenLabs `eleven_v4` through `/v1/text-to-dialogue`.

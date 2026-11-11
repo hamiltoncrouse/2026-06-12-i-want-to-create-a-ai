@@ -1,3 +1,5 @@
+import { fetchPublicText, isPublicHttpUrl } from '../lib/safe-fetch.js'
+
 const audioExtensions = /\.(mp3|m4a|wav|ogg|oga|aac|flac|webm)(\?.*)?$/i
 
 function absoluteUrl(value, baseUrl) {
@@ -16,21 +18,35 @@ function fileNameFromUrl(url) {
   }
 }
 
+function safeDecode(value) {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    // A stray "%" in a file name is not a reason to fail the whole scan.
+    return value
+  }
+}
+
 function cleanName(name) {
-  return decodeURIComponent(name)
-    .replace(/\.[a-z0-9]+$/i, '')
+  return String(name)
     .replace(/[_-]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
 }
 
+// "Artist - Title.mp3" names carry both; split on the spaced hyphen before the
+// separators are tidied away, and ignore a leading track number ("16 - Song").
 function splitArtistTitle(name) {
-  const cleaned = cleanName(name)
-  const parts = cleaned.split(/\s+-\s+/)
+  const base = safeDecode(String(name)).replace(/\.[a-z0-9]+$/i, '')
+  const parts = base
+    .split(/\s+[-\u2013\u2014]\s+/)
+    .map(cleanName)
+    .filter(Boolean)
+  if (parts.length > 1 && /^\d{1,3}$/.test(parts[0])) parts.shift()
   if (parts.length >= 2) {
     return { artist: parts[0], title: parts.slice(1).join(' - ') }
   }
-  return { artist: 'Unknown Artist', title: cleaned || 'Untitled Track' }
+  return { artist: 'Unknown Artist', title: parts[0] || cleanName(base) || 'Untitled Track' }
 }
 
 function stringArray(value, maxItems = 8, maxLength = 80) {
@@ -110,8 +126,9 @@ function trackMetadata(item) {
 }
 
 function trackFromManifestItem(item, index, manifestUrl) {
+  if (!item || (typeof item !== 'string' && typeof item !== 'object')) return null
   const file = typeof item === 'string' ? item : item.file || item.url || item.href || item.path
-  if (!file || !audioExtensions.test(file)) return null
+  if (typeof file !== 'string' || !audioExtensions.test(file)) return null
 
   const base = new URL('.', manifestUrl).toString()
   const url = absoluteUrl(file, base)
@@ -119,8 +136,8 @@ function trackFromManifestItem(item, index, manifestUrl) {
 
   return {
     id: `folder-${index}-${file}`,
-    title: item.title || parsed.title,
-    artist: item.artist || parsed.artist,
+    title: optionalString(item.title, 200) || parsed.title,
+    artist: optionalString(item.artist, 200) || parsed.artist,
     url,
     source: 'folder',
     ...trackMetadata(item),
@@ -128,7 +145,9 @@ function trackFromManifestItem(item, index, manifestUrl) {
 }
 
 function parseHtmlLinks(html, folderUrl) {
-  const hrefs = [...html.matchAll(/href=["']([^"']+)["']/gi)].map((match) => match[1])
+  const hrefs = [...html.matchAll(/href=["']([^"']+)["']/gi)].map((match) =>
+    match[1].replace(/&amp;/g, '&'),
+  )
   return hrefs
     .filter((href) => audioExtensions.test(href))
     .map((href, index) => {
@@ -151,25 +170,39 @@ export default async function handler(req, res) {
     return
   }
 
+  if (!isPublicHttpUrl(sourceUrl)) {
+    res.status(400).json({ error: 'Enter a public http(s) address for the music source' })
+    return
+  }
+
   try {
-    const response = await fetch(sourceUrl, {
-      headers: { 'User-Agent': 'Airbreak AI DJ/1.0' },
-    })
-    if (!response.ok) {
-      res.status(400).json({ error: `Source returned ${response.status}` })
+    let source
+    try {
+      source = await fetchPublicText(sourceUrl, { headers: { 'User-Agent': 'Airbreak AI DJ/1.0' } })
+    } catch (error) {
+      const timedOut = error instanceof Error && error.name === 'TimeoutError'
+      res.status(400).json({
+        error: timedOut
+          ? 'Source took too long to respond'
+          : error instanceof Error
+            ? error.message
+            : 'Source could not be read',
+      })
       return
     }
 
-    const contentType = response.headers.get('content-type') || ''
-    const body = await response.text()
+    // Relative files resolve against wherever the source finally landed.
+    const { body, contentType, url: finalUrl } = source
     let tracks = []
 
-    if (contentType.includes('json') || sourceUrl.endsWith('.json')) {
+    if (contentType.includes('json') || /\.json$/i.test(new URL(finalUrl).pathname)) {
       const json = JSON.parse(body)
-      const items = Array.isArray(json) ? json : json.tracks || json.files || []
-      tracks = items.map((item, index) => trackFromManifestItem(item, index, sourceUrl)).filter(Boolean)
+      const items = Array.isArray(json) ? json : json?.tracks || json?.files || []
+      tracks = (Array.isArray(items) ? items : [])
+        .map((item, index) => trackFromManifestItem(item, index, finalUrl))
+        .filter(Boolean)
     } else {
-      tracks = parseHtmlLinks(body, sourceUrl)
+      tracks = parseHtmlLinks(body, finalUrl)
     }
 
     if (!tracks.length) {

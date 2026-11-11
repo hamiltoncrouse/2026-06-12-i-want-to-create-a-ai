@@ -3,6 +3,8 @@ import { preparePatter, patterInstructions, compilePatter } from '../lib/patter-
 import { deliveryInstructions, constrainBreakDelivery } from '../lib/character-delivery.js'
 import { usesAudioTags } from '../lib/voice-config.js'
 
+const WRITER_TIMEOUT_MS = 25000
+
 const breakKinds = ['intro', 'songTalk', 'newsWeather', 'commercial', 'bumper', 'caller']
 const speakers = ['dj', 'cohost', 'caller', 'reporter', 'imaging']
 
@@ -488,6 +490,8 @@ export default async function handler(req, res) {
         Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
         'Content-Type': 'application/json',
       },
+      // A stuck writer must fall back to the offline break, not stall the show.
+      signal: AbortSignal.timeout(WRITER_TIMEOUT_MS),
       body: JSON.stringify({
         model: process.env.OPENAI_SCRIPT_MODEL || 'gpt-5.4-mini',
         instructions: [
@@ -557,7 +561,11 @@ export default async function handler(req, res) {
                 granted: Boolean(body.listenerCall.granted),
               }
             : undefined,
-          recentScripts: body.recentScripts || (body.recentScript ? [body.recentScript] : []),
+          recentScripts: stringArray(
+            body.recentScripts || (body.recentScript ? [body.recentScript] : []),
+            12,
+            1600,
+          ),
           showNotes: stringArray(body.showNotes, 8, 160),
           localTime: stationLocalTime(body.context?.timezone),
         }),

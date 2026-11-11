@@ -1,6 +1,8 @@
 import { constrainAudioTags } from '../lib/character-delivery.js'
 import { elevenModel, voiceProvider, stripAudioTags } from '../lib/voice-config.js'
 
+const TTS_TIMEOUT_MS = 25000
+
 const voices = new Set([
   'alloy',
   'ash',
@@ -119,6 +121,7 @@ async function synthOpenAI({ text, voice, style, speaker }) {
       Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
       'Content-Type': 'application/json',
     },
+    signal: AbortSignal.timeout(TTS_TIMEOUT_MS),
     body: JSON.stringify({
       model: process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts',
       voice: voices.has(voice) ? voice : 'marin',
@@ -161,7 +164,10 @@ function elevenKey() {
 async function synthElevenLabs({ text, voice, speaker, elevenVoiceId, djId }) {
   const apiKey = elevenKey()
   if (!apiKey) return null
-  const voiceId = elevenVoiceId || mapVoiceToEleven(voice)
+  const voiceId =
+    typeof elevenVoiceId === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(elevenVoiceId)
+      ? elevenVoiceId
+      : mapVoiceToEleven(voice)
   const model = elevenModel()
   const isV4 = ['eleven_v4', 'eleven_v4_turbo'].includes(model)
   const settings = elevenVoiceSettings(speaker)
@@ -191,6 +197,7 @@ async function synthElevenLabs({ text, voice, speaker, elevenVoiceId, djId }) {
         'Content-Type': 'application/json',
         Accept: 'audio/mpeg',
       },
+      signal: AbortSignal.timeout(TTS_TIMEOUT_MS),
       body: JSON.stringify(body),
     },
   )
@@ -221,7 +228,11 @@ export default async function handler(req, res) {
     let usedProvider = 'openai'
     let audio = null
     if (wantsElevenLabs) {
-      audio = await synthElevenLabs({ text, voice, speaker, elevenVoiceId, djId })
+      // A network error or timeout here must still reach the OpenAI fallback.
+      audio = await synthElevenLabs({ text, voice, speaker, elevenVoiceId, djId }).catch((error) => {
+        console.warn(`ElevenLabs voice synthesis failed: ${error instanceof Error ? error.message : error}`)
+        return null
+      })
       if (audio) {
         usedProvider = 'elevenlabs'
       } else {

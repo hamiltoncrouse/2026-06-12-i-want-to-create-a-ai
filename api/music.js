@@ -1,7 +1,11 @@
 // Generates short produced jingles/stings via the ElevenLabs Music API. The
 // key stays server-side; the browser only ever receives audio. Returns 204
 // when no key is configured. Used to make station jingles (e.g. a sung WICH
-// bumper) — not wired into playback unless explicitly added.
+// bumper) — not wired into playback unless explicitly added. Operator-only:
+// requires AIRBREAK_ADMIN_TOKEN (see lib/admin.js), since each call is a paid
+// generation and the listener app never makes one.
+
+import { rejectNonAdmin } from '../lib/admin.js'
 
 function elevenKey() {
   return (
@@ -21,6 +25,8 @@ export default async function handler(req, res) {
     res.status(405).json({ error: 'Method not allowed' })
     return
   }
+
+  if (rejectNonAdmin(req, res)) return
 
   const { prompt, lengthMs, forceInstrumental } = req.body || {}
   if (!prompt || typeof prompt !== 'string') {
@@ -47,6 +53,7 @@ export default async function handler(req, res) {
         'Content-Type': 'application/json',
         Accept: 'audio/mpeg',
       },
+      signal: AbortSignal.timeout(55000),
       body: JSON.stringify({
         prompt: prompt.slice(0, 2000),
         music_length_ms: length,

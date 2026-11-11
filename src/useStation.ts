@@ -285,6 +285,13 @@ export function useStation(
   const analyserNodeRef = useRef<AnalyserNode | null>(null)
   const fxRef = useRef<VoiceFx | null>(null)
   const stopRef = useRef(false)
+  // Bumped whenever the listener interrupts the show (pause, skip, picking a
+  // track, loading a library). An in-flight break or transition compares its
+  // captured value and quietly retires instead of racing the one that replaced it.
+  const runRef = useRef(0)
+  // Web Audio buffer sources (spots, transition beds) that pause() on the
+  // <audio> elements cannot reach; tracked so an interruption silences them too.
+  const activeSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set())
   const phaseRef = useRef<StationMode>('idle')
   const tracksRef = useRef(tracks)
   const djRef = useRef(dj)
@@ -300,6 +307,7 @@ export function useStation(
   const masterRef = useRef(1)
   const duckRef = useRef(1)
   const rampRef = useRef<number | null>(null)
+  const rampTargetRef = useRef(1)
   const memoryStore = useRef(createStationMemory(() => window.localStorage))
   const djProfileChanged = useRef(createDjProfileChangeDetector())
   const recentScriptsRef = useRef<string[]>([])
@@ -427,9 +435,29 @@ export function useStation(
     [applyVolumes],
   )
 
+  // Stop everything audible and retire any in-flight break or transition.
+  const interrupt = useCallback(() => {
+    runRef.current += 1
+    if (rampRef.current) cancelAnimationFrame(rampRef.current)
+    rampRef.current = null
+    window.speechSynthesis?.cancel()
+    breakRef.current?.pause()
+    songRef.current?.pause()
+    for (const source of activeSourcesRef.current) {
+      try {
+        source.stop()
+      } catch {
+        // Already finished.
+      }
+    }
+    activeSourcesRef.current.clear()
+  }, [])
+
   const rampDuck = useCallback(
     (target: number, ms: number) => {
       if (rampRef.current) cancelAnimationFrame(rampRef.current)
+      rampRef.current = null
+      rampTargetRef.current = target
       // Animation frames do not run with the screen off; jump straight to the
       // target so the song is not stuck quiet until the phone unlocks.
       if (document.hidden) {
@@ -443,7 +471,7 @@ export function useStation(
         const t = Math.min(1, (now - startedAt) / ms)
         duckRef.current = from + (target - from) * t
         applyVolumes()
-        if (t < 1) rampRef.current = requestAnimationFrame(step)
+        rampRef.current = t < 1 ? requestAnimationFrame(step) : null
       }
       rampRef.current = requestAnimationFrame(step)
     },
@@ -765,7 +793,11 @@ export function useStation(
             gain.gain.value = entry.gain * SFX_TRIM * masterRef.current
             source.connect(gain)
             gain.connect(limiter)
-            source.onended = () => done(true)
+            source.onended = () => {
+              activeSourcesRef.current.delete(source)
+              done(true)
+            }
+            activeSourcesRef.current.add(source)
             source.start()
             window.setTimeout(() => done(true), entry.buffer.duration * 1000 + 400)
           })
@@ -935,13 +967,13 @@ export function useStation(
   // the single buffer through the voice chain. This removes the audible gap you
   // get from swapping the source on a shared <audio> element between clips.
   const playSpotRun = useCallback(
-    async (urls: string[], onNearEnd?: () => void) => {
+    async (urls: string[], onNearEnd?: () => void, isStale: () => boolean = () => stopRef.current) => {
       const ctx = audioCtxRef.current
       const fx = fxRef.current
       if (!ctx || !fx) {
         // No Web Audio graph: fall back to plain sequential element playback.
         for (let i = 0; i < urls.length; i++) {
-          if (stopRef.current) return
+          if (isStale()) return
           await playAudioUrl(urls[i], i === urls.length - 1 ? onNearEnd : undefined)
         }
         return
@@ -952,7 +984,7 @@ export function useStation(
         const buffer = await decodeSpotBuffer(url)
         if (buffer) buffers.push(buffer)
       }
-      if (!buffers.length || stopRef.current) return
+      if (!buffers.length || isStale()) return
 
       const rate = ctx.sampleRate
       const channelCount = Math.max(...buffers.map((b) => b.numberOfChannels))
@@ -986,7 +1018,6 @@ export function useStation(
           if (i < buffers.length - 1) offset += seamPad
         })
       }
-
       ctx.resume().catch(() => undefined)
       return new Promise<void>((resolve) => {
         const source = ctx.createBufferSource()
@@ -995,11 +1026,18 @@ export function useStation(
         gain.gain.value = masterRef.current
         source.connect(gain)
         gain.connect(fx.voiceBus)
+        let nearEndTimer: number | undefined
         if (onNearEnd) {
           const lead = Math.max(0, spliced.duration - TALKUP_OVERLAP_S)
-          window.setTimeout(() => onNearEnd(), lead * 1000)
+          nearEndTimer = window.setTimeout(() => onNearEnd(), lead * 1000)
         }
-        source.onended = () => resolve()
+        source.onended = () => {
+          activeSourcesRef.current.delete(source)
+          // Cut short by an interruption: do not start the song under it later.
+          if (isStale()) window.clearTimeout(nearEndTimer)
+          resolve()
+        }
+        activeSourcesRef.current.add(source)
         source.start()
         // Safety net in case onended never fires.
         window.setTimeout(() => resolve(), spliced.duration * 1000 + 300)
@@ -1009,7 +1047,12 @@ export function useStation(
   )
 
   const playPlanAudio = useCallback(
-    async (plan: BreakPlan, onNearEnd: () => void, onStarted?: () => void) => {
+    async (
+      plan: BreakPlan,
+      onNearEnd: () => void,
+      onStarted?: () => void,
+      isStale: () => boolean = () => stopRef.current,
+    ) => {
       const voiced: BreakSegment[] = (plan.segments || []).filter((segment) => segment.audioUrl)
       if (!voiced.length && plan.audioUrl) {
         voiced.push({ speaker: 'dj', text: plan.script, audioUrl: plan.audioUrl })
@@ -1029,7 +1072,7 @@ export function useStation(
       ) {
         setVoiceEffect('spot')
         await playAudioUrl(jingles[Math.floor(Math.random() * jingles.length)])
-        if (stopRef.current) return
+        if (isStale()) return
         playedJingle = true
       }
 
@@ -1042,22 +1085,22 @@ export function useStation(
         playStinger()
         await new Promise((resolve) => window.setTimeout(resolve, 260))
       }
-      if (stopRef.current) return
+      if (isStale()) return
 
       if (!voiced.length) {
-        const words = plan.script.split(/\s+/).length
+        const words = (plan.script || '').split(/\s+/).length
         const overlapDelay = Math.max(
           0,
           (words / SPOKEN_WORDS_PER_SECOND - TALKUP_OVERLAP_S) * 1000,
         )
         const overlapTimer = window.setTimeout(onNearEnd, overlapDelay)
-        await speakFallback(plan.script, onStarted)
+        await speakFallback(plan.script || '', onStarted)
         window.clearTimeout(overlapTimer)
         return
       }
 
       for (let i = 0; i < voiced.length; i++) {
-        if (stopRef.current) break
+        if (isStale()) break
         // Play a run of back-to-back pre-recorded spot assets gaplessly (the
         // phone ring straight into the recorded voice) instead of swapping the
         // <audio> source between them, which leaves an audible gap.
@@ -1067,7 +1110,7 @@ export function useStation(
           setVoiceEffect('spot')
           const urls = voiced.slice(i, j + 1).map((segment) => segment.audioUrl as string)
           const runIsLast = j === voiced.length - 1
-          await playSpotRun(urls, runIsLast ? onNearEnd : undefined)
+          await playSpotRun(urls, runIsLast ? onNearEnd : undefined, isStale)
           i = j
           continue
         }
@@ -1196,6 +1239,7 @@ export function useStation(
           showNotes: showNotesRef.current,
         }),
       })
+      if (!breakResponse.ok) return
       const plan = (await breakResponse.json()) as BreakPlan
       // Background playback is single-voice through the song element, so flatten
       // any segments into one DJ take.
@@ -1499,7 +1543,10 @@ export function useStation(
             showNotes: showNotesRef.current,
           }),
         })
+        // An error page or error JSON is not a break; use the offline backup.
+        if (!breakResponse.ok) throw new Error(`Break writer returned ${breakResponse.status}`)
         plan = (await breakResponse.json()) as BreakPlan
+        if (!plan || typeof plan.script !== 'string') throw new Error('Malformed break')
         plan.usageTipId = usageTip?.id
         segments = plan.segments?.length ? plan.segments : [{ speaker: 'dj', text: plan.script }]
 
@@ -1854,6 +1901,8 @@ export function useStation(
     async (index: number, count: number, previousIndex?: number) => {
       const activeTracks = tracksRef.current
       if (!activeTracks.length || stopRef.current) return
+      const run = runRef.current
+      const stale = () => stopRef.current || run !== runRef.current
 
       const airingDjId = djRef.current.id
       const breakKind = resolveKind()
@@ -1861,8 +1910,9 @@ export function useStation(
       setMode('loading')
       setStatus('Cueing the mic')
       const breakPlan = await requestBreakForAir(index, breakKind, previousIndex)
-      breakPlan.broadcastId ??= crypto.randomUUID()
-      if (stopRef.current) return
+      if (stale()) return
+      breakPlan.broadcastId ??=
+        globalThis.crypto?.randomUUID?.() ?? `local-${Date.now()}-${Math.random().toString(36).slice(2)}`
       if (breakPlan.title !== 'Standby liner') {
         const airedRequestIds = listenerRequestsRef.current.slice(0, 3).map((request) => request.id)
         if (airedRequestIds.length) onRequestsAiredRef.current?.(airedRequestIds)
@@ -1895,7 +1945,7 @@ export function useStation(
       // The DJ speaks dry; the song fades in under the last seconds of the talk.
       let songStarted = false
       const startSongUnder = () => {
-        if (songStarted || stopRef.current) return
+        if (songStarted || stale()) return
         songStarted = true
         songsSinceBreakRef.current = 1
         beginSong(index, count)
@@ -1915,9 +1965,8 @@ export function useStation(
         bed.load()
       }
       bed.play().catch(() => undefined)
-
-      await playPlanAudio(breakPlan, startSongUnder, () => rememberAired(airingDjId, breakPlan))
-      if (stopRef.current) return
+      await playPlanAudio(breakPlan, startSongUnder, () => rememberAired(airingDjId, breakPlan), stale)
+      if (stale()) return
 
       startSongUnder()
       phaseRef.current = 'song'
@@ -1935,6 +1984,7 @@ export function useStation(
   const advance = useCallback(
     async (fromIndex: number, prevCount: number) => {
       if (stopRef.current) return
+      const run = runRef.current
       const nextCount = prevCount + 1
       countRef.current = nextCount
       setPlayCount(nextCount)
@@ -1970,7 +2020,8 @@ export function useStation(
       } else {
         nextIndex = await findPlayableIndex((fromIndex + 1) % Math.max(1, tracksRef.current.length))
       }
-      if (stopRef.current) return
+      // A skip or pause while the next track was being verified wins.
+      if (stopRef.current || run !== runRef.current) return
       // DJ breaks play through the Web Audio graph, which mobile browsers
       // suspend while the tab is backgrounded or the screen is locked — a break
       // there would go silent and stall the show. So while hidden, skip the
@@ -2043,13 +2094,17 @@ export function useStation(
         const audio = songRef.current
         if (!audio?.src) return
         if (audio.paused && !audio.ended) {
+          // Not a stall: restart the clock so time spent paused never counts.
+          stallRef.current = { time: audio.currentTime, at: 0 }
           audio.play().catch(() => undefined)
           return
         }
         const now = Date.now()
-        if (Math.abs(audio.currentTime - stallRef.current.time) > 0.5) {
+        // Start the clock on the first look too, so a track that never gets
+        // past zero is still caught.
+        if (!stallRef.current.at || Math.abs(audio.currentTime - stallRef.current.time) > 0.5) {
           stallRef.current = { time: audio.currentTime, at: now }
-        } else if (stallRef.current.at && now - stallRef.current.at > 45000) {
+        } else if (now - stallRef.current.at > 45000) {
           // The stream has been frozen for 45 seconds; move the show along.
           stallRef.current = { time: 0, at: 0 }
           if (tracksRef.current[indexRef.current]?.id) {
@@ -2071,7 +2126,18 @@ export function useStation(
   // restart anything an interruption left paused.
   useEffect(() => {
     const onVisibilityChange = () => {
-      if (document.hidden || stopRef.current) return
+      if (document.hidden) {
+        // Animation frames stop with the screen off: finish a volume ramp that
+        // was mid-flight so the song is not left ducked until the phone unlocks.
+        if (rampRef.current) {
+          cancelAnimationFrame(rampRef.current)
+          rampRef.current = null
+          duckRef.current = rampTargetRef.current
+          applyVolumes()
+        }
+        return
+      }
+      if (stopRef.current) return
       audioCtxRef.current?.resume().catch(() => undefined)
       const keepAlive = keepAliveRef.current
       if (keepAlive?.src && keepAlive.paused) keepAlive.play().catch(() => undefined)
@@ -2088,7 +2154,7 @@ export function useStation(
     }
     document.addEventListener('visibilitychange', onVisibilityChange)
     return () => document.removeEventListener('visibilitychange', onVisibilityChange)
-  }, [])
+  }, [applyVolumes])
 
   // Keep a short, real-voice station liner ready as the emergency on-air bridge.
   useEffect(() => {
@@ -2160,6 +2226,9 @@ export function useStation(
       songAudio.play().catch(() => undefined)
     }
     stopRef.current = false
+    runRef.current += 1
+    const run = runRef.current
+    stallRef.current = { time: 0, at: 0 }
     setBufferStatus('Writing the opening break')
     countRef.current = 0
     setPlayCount(0)
@@ -2174,7 +2243,7 @@ export function useStation(
     passPlayedRef.current.clear()
     void (async () => {
       const startIndex = await findPlayableIndex(indexRef.current)
-      if (stopRef.current) return
+      if (stopRef.current || run !== runRef.current) return
       indexRef.current = startIndex
       setCurrentIndex(startIndex)
       playBreakThenSong(startIndex, 0)
@@ -2192,10 +2261,7 @@ export function useStation(
 
   const pause = useCallback(() => {
     stopRef.current = true
-    if (rampRef.current) cancelAnimationFrame(rampRef.current)
-    window.speechSynthesis?.cancel()
-    breakRef.current?.pause()
-    songRef.current?.pause()
+    interrupt()
     keepAliveRef.current?.pause()
     setMode('paused')
     setStatus('Paused')
@@ -2204,10 +2270,11 @@ export function useStation(
     } catch {
       // Optional hint for lock-screen controls.
     }
-  }, [])
+  }, [interrupt])
 
   const resume = useCallback(() => {
     stopRef.current = false
+    stallRef.current = { time: 0, at: 0 }
     ensureAudioGraph()
     keepAliveRef.current?.play().catch(() => undefined)
     const audio = songRef.current
@@ -2225,11 +2292,8 @@ export function useStation(
   const skip = useCallback(() => {
     if (!tracksRef.current.length) return
     const previousIndex = phaseRef.current === 'song' ? indexRef.current : undefined
-    stopRef.current = true
-    if (rampRef.current) cancelAnimationFrame(rampRef.current)
-    window.speechSynthesis?.cancel()
-    breakRef.current?.pause()
-    songRef.current?.pause()
+    interrupt()
+    const run = runRef.current
     const nextCount = countRef.current + 1
     countRef.current = nextCount
     setPlayCount(nextCount)
@@ -2241,13 +2305,17 @@ export function useStation(
       const nextIndex = pending
         ? await pending
         : await findPlayableIndex((indexRef.current + 1) % Math.max(1, tracksRef.current.length))
-      if (stopRef.current) return
+      if (stopRef.current || run !== runRef.current) return
       playBreakThenSong(nextIndex, nextCount, previousIndex)
     })()
-  }, [findPlayableIndex, playBreakThenSong])
+  }, [findPlayableIndex, interrupt, playBreakThenSong])
 
   const playTrack = useCallback(
     (index: number) => {
+      // Capture the song being left before the cursor moves, so the DJ
+      // back-announces what actually played rather than the track just picked.
+      const previousIndex =
+        phaseRef.current === 'song' && indexRef.current !== index ? indexRef.current : undefined
       indexRef.current = index
       setCurrentIndex(index)
       if (phaseRef.current === 'idle' || mode === 'idle' || mode === 'paused') {
@@ -2255,19 +2323,14 @@ export function useStation(
         phaseRef.current = 'idle'
         return
       }
-      const previousIndex = phaseRef.current === 'song' ? indexRef.current : undefined
-      stopRef.current = true
-      if (rampRef.current) cancelAnimationFrame(rampRef.current)
-      window.speechSynthesis?.cancel()
-      breakRef.current?.pause()
-      songRef.current?.pause()
+      interrupt()
       const nextCount = countRef.current + 1
       countRef.current = nextCount
       setPlayCount(nextCount)
       stopRef.current = false
       playBreakThenSong(index, nextCount, previousIndex)
     },
-    [mode, playBreakThenSong],
+    [interrupt, mode, playBreakThenSong],
   )
 
   const seek = useCallback((time: number) => {
@@ -2282,10 +2345,8 @@ export function useStation(
 
   const setLibrary = useCallback((next: Track[]) => {
     stopRef.current = true
-    if (rampRef.current) cancelAnimationFrame(rampRef.current)
-    window.speechSynthesis?.cancel()
-    breakRef.current?.pause()
-    songRef.current?.pause()
+    interrupt()
+    keepAliveRef.current?.pause()
     preloadRef.current.clear()
     goodTracksRef.current.clear()
     badTracksRef.current.clear()
@@ -2302,7 +2363,7 @@ export function useStation(
     setCurrentIndex(0)
     setPlannedNextIndex(next.length > 1 ? 1 : null)
     setProgress({ time: 0, duration: 0 })
-  }, [])
+  }, [interrupt])
 
   const pauseRef = useRef(pause)
   const resumeRef = useRef(resume)
@@ -2337,13 +2398,12 @@ export function useStation(
   useEffect(() => {
     return () => {
       stopRef.current = true
-      if (rampRef.current) cancelAnimationFrame(rampRef.current)
-      window.speechSynthesis?.cancel()
-      breakRef.current?.pause()
-      songRef.current?.pause()
+      interrupt()
+      keepAliveRef.current?.pause()
+      sfxRef.current?.pause()
       audioCtxRef.current?.close().catch(() => undefined)
     }
-  }, [])
+  }, [interrupt])
 
   // Jump a requested song to the front of the line: it becomes the next
   // track, and the upcoming break gets written around it.
