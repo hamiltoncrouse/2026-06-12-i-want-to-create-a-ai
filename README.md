@@ -145,28 +145,45 @@ and the [dialogue API](https://elevenlabs.io/docs/api-reference/text-to-dialogue
 Run charge-free request/fallback checks with `node --test tests/voice.test.js`.
 
 
-## Reviewed patter and show continuity
+## The DJ writer
 
-The writer keeps `gpt-5.4-mini` by default. Intro/song-talk material comes from
-`lib/song-cards.js` and `lib/persona-canon.js`. The starter cache has eight
-reviewed songs with official source links and review dates. Matching requires
-exact artist/title identity; low-confidence metadata gets no card. Work-level
-facts may apply to other performances, but recording-specific cues additionally
-require matching album and `version: "original studio recording"`, with no live
-show or alternate-version marker. Missing coverage gets natural transitions,
-not made-up trivia. Playlist `facts` and `djNotes` are not treated as research.
+`/api/dj-break` writes each break with an OpenAI model. The writer is trusted to
+sound like a real jock: it may use what it knows about the music, improvise in
+character, and invent small studio details. There is no fact filter on the
+output. Real-world current events (news, weather, sports) still come only from
+the live station context.
 
-`GET /api/song-card?artist=...&title=...` is a cacheable on-demand lookup of
-these reviewed cards, not an automatic research or paid generation service.
-New coverage requires reviewing sources and adding cards. The writer receives
-at most one selected fact, listening cue, or fictional life bit and returns a
-placeholder; the server inserts its approved wording and exposes source links
-in the break log. A conservative rule-based screen rejects common unsupported
-history/biography patterns in music patter; it is not a semantic fact verifier.
+What shapes a break:
 
-Fourteen fictional hosts have three stable life/callback items each. A callback
-is available only after its prerequisite story aired. Johnny London and Sir Paul
-receive no invented autobiographical canon. Recent scripts and used material IDs
+- **Radio craft, not rules** (`lib/patter-editor.js`): one idea per break, talk
+  to one person, short spoken sentences, opinions, loose formatics, and a ban
+  list of ad-copy and AI-sounding phrases.
+- **A shape and a length per break** (`api/dj-break.js`): the server picks one
+  of a dozen break shapes (quick hit, back-sell cold open, the story, the
+  callback, the phones, ...) and a length band weighted toward short, so breaks
+  stop following one template. Recent opening words are passed as `avoidOpeners`.
+- **Signature moves per host** (`lib/persona-bits.js`): recurring features,
+  verbal habits and stubborn opinions for each preset DJ. Two are offered per
+  break, least-recently-used first. Add or edit lines there to change a host.
+  Custom DJs improvise from their style and backstory.
+- **Notes about the record**: sourced cards in `lib/song-cards.js`, plus the
+  `facts`, `djNotes`, `year`, `album` and `liveShow` fields from your library
+  manifest.
+- **Show memory**: the writer leaves a one-line `showNote` after a break (a bit
+  it started, a detail it invented) and gets the last eight back, so running
+  gags and callbacks carry across breaks.
+
+### Using a better writer model
+
+Set `OPENAI_SCRIPT_MODEL` to any model your OpenAI account can use (the default
+is `gpt-5.4-mini`). In Vercel: Project → Settings → Environment Variables → add
+`OPENAI_SCRIPT_MODEL`, then redeploy. If the name is wrong or the account lacks
+access, the writer logs a warning and falls back to the default instead of
+going silent. Each break's response includes `writerModel`, so you can confirm
+which model wrote it. `scripts/compare-patter.mjs` runs a small side-by-side of
+two models on the same prompts.
+
+Recent scripts and used material IDs
 persist per DJ, per browser/device for sixty days; the Station tab can clear one
 DJ's memory. Blocked storage falls back to session memory. Memory records when
 a break actually starts playing, not when it is generated; an interrupted break
@@ -190,6 +207,5 @@ OPENAI_API_KEY=<existing-key> CANDIDATE_MODEL=<available-model-id> node scripts/
 ```
 
 The script checks account model availability and writes `patter-comparison.json`
-with outputs, latency, usage, and a blank human-scoring rubric. Do not change the
-production writer model without comparing accuracy, warmth, specificity,
-repetition and character fit. No comparison is implied by the automated tests.
+with outputs, latency, usage, and a blank human-scoring rubric for warmth,
+specificity, repetition and character fit.
