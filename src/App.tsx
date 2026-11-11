@@ -304,6 +304,11 @@ function App() {
   const [context, setContext] = useState<StationContext>(emptyContext)
   const [contextEpoch, setContextEpoch] = useState(0)
   const [tab, setTab] = useState<Tab>('onair')
+  // Each tab is its own screen: open it at the top instead of inheriting the
+  // previous tab's scroll position.
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [tab])
   const [folderUrl, setFolderUrl] = useState(defaultFolderUrl)
   const [libraryMessage, setLibraryMessage] = useState('')
   const [scanning, setScanning] = useState(false)
@@ -318,6 +323,7 @@ function App() {
     }
   })
   const [artistSearch, setArtistSearch] = useState('')
+  const [trackSearch, setTrackSearch] = useState('')
   const [isDjFormOpen, setIsDjFormOpen] = useState(false)
   const [draftDj, setDraftDj] = useState<DjProfile>(blankDraft)
   const [stationCity, setStationCity] = useState(
@@ -731,6 +737,16 @@ function App() {
       setPreviewingDjId(null)
     }
   }, [])
+
+  // Keep each row's real position so tapping a filtered result plays that track.
+  const visibleTracks = useMemo(() => {
+    const query = trackSearch.trim().toLowerCase()
+    const rows = tracks.map((track, index) => ({ track, index }))
+    if (!query) return rows
+    return rows.filter(({ track }) =>
+      `${track.title} ${track.artist} ${track.album || ''}`.toLowerCase().includes(query),
+    )
+  }, [tracks, trackSearch])
 
   const loadFolder = useCallback(async () => {
     setScanning(true)
@@ -2169,8 +2185,23 @@ function App() {
               </p>
             </div>
 
+            <details className="sourcePanel" open={tracks.length === 0 || undefined}>
+              <summary>
+                <Cloud size={15} aria-hidden="true" />
+                <span>Music source</span>
+                <small>{libraryMessage || `${tracks.length} tracks in rotation`}</small>
+              </summary>
             <div className="folderRow">
               <input
+                type="url"
+                inputMode="url"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+                enterKeyHint="go"
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !scanning) void loadFolder()
+                }}
                 value={folderUrl}
                 onChange={(event) => setFolderUrl(event.target.value)}
                 placeholder="Manifest or folder URL"
@@ -2183,7 +2214,7 @@ function App() {
                 disabled={scanning}
                 aria-label="Load shared source"
               >
-                {scanning ? <Loader2 className="spinIcon" size={19} /> : <Cloud size={19} />}
+                {scanning ? <Loader2 className="spinIcon" size={17} /> : 'Load'}
               </button>
             </div>
             <label className="fileDrop">
@@ -2196,9 +2227,25 @@ function App() {
                 onChange={(event) => addLocalFiles(event.target.files)}
               />
             </label>
-            <p className="smallStatus">{libraryMessage || `${tracks.length} tracks in rotation`}</p>
+            </details>
+            {tracks.length > 8 && (
+              <div className="artistSearch trackSearch">
+                <Search size={15} aria-hidden="true" />
+                <input
+                  type="search"
+                  value={trackSearch}
+                  onChange={(event) => setTrackSearch(event.target.value)}
+                  placeholder={`Search ${tracks.length} tracks…`}
+                  aria-label="Search tracks"
+                  enterKeyHint="search"
+                />
+              </div>
+            )}
             <div className="trackList">
-              {tracks.map((track, index) => (
+              {visibleTracks.length === 0 && tracks.length > 0 && (
+                <p className="hintLine">No tracks match “{trackSearch}”.</p>
+              )}
+              {visibleTracks.map(({ track, index }) => (
                 <button
                   key={track.id}
                   className={index === currentIndex ? 'trackRow active' : 'trackRow'}
@@ -2227,7 +2274,7 @@ function App() {
                       </small>
                     )}
                   </span>
-                  <span className="sourceChip">{track.source}</span>
+                  {track.source === 'local' && <span className="sourceChip">On device</span>}
                 </button>
               ))}
             </div>
@@ -2237,11 +2284,6 @@ function App() {
         {tab === 'station' && (
           <section className="view" key="station">
             <h2 className="viewTitle">Station</h2>
-            <div className="infoCard">
-              <h3>{selectedDj.name}&apos;s show memory</h3>
-              <p>Remembers recent broadcasts and avoids repeating stories on this device for up to sixty days. If browser storage is unavailable, memory lasts for this session.</p>
-              <button type="button" className="freqChip" onClick={station.clearDjMemory}>Clear this DJ&apos;s memory</button>
-            </div>
             {selectedDj.venue ? (
               <>
                 <div className="infoCard">
@@ -2408,6 +2450,21 @@ function App() {
             <div className="queueMeta">
               <span>{bufferStatus}</span>
               <span>Next: {breakKindLabels[selectBreakKind(breakSeq)]}</span>
+            </div>
+            <div className="infoCard memoryCard">
+              <h3>{selectedDj.name}&apos;s show memory</h3>
+              <p>Remembers recent broadcasts and avoids repeating stories on this device for up to sixty days. If browser storage is unavailable, memory lasts for this session.</p>
+              <button
+                type="button"
+                className="freqChip"
+                onClick={() => {
+                  if (window.confirm(`Clear ${selectedDj.name}'s show memory on this device?`)) {
+                    station.clearDjMemory()
+                  }
+                }}
+              >
+                Clear this DJ&apos;s memory
+              </button>
             </div>
           </section>
         )}

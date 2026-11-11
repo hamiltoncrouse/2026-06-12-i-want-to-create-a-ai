@@ -266,8 +266,11 @@ textarea {
 .visualizerWrap {
   position: relative;
   isolation: isolate;
-  width: min(76vw, 330px);
+  /* Shrink the deck on short screens so the transport (the primary control)
+     always clears the tab bar without scrolling. */
+  width: clamp(132px, calc(100svh - 440px - env(safe-area-inset-top) - env(safe-area-inset-bottom)), min(76vw, 330px));
   margin: 6px auto 0;
+  container-type: inline-size;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
@@ -342,7 +345,8 @@ textarea {
   position: relative;
   z-index: 1;
   transform: translateY(-160%);
-  font-size: 15px;
+  /* Scales with the deck so the initials stay on the label when it shrinks. */
+  font-size: clamp(7px, 5cqw, 15px);
   font-weight: 700;
   letter-spacing: 0.06em;
   color: #0b0c10;
@@ -2171,6 +2175,127 @@ textarea {
 .seekBar,
 .volumeControl input {
   background: rgba(255, 255, 255, 0.14);
+}
+
+/* ---------- Music source (collapsible) ---------- */
+
+.sourcePanel {
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--card);
+}
+
+.sourcePanel summary {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 48px;
+  padding: 0 14px;
+  font-size: 14px;
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+}
+
+.sourcePanel summary::-webkit-details-marker {
+  display: none;
+}
+
+.sourcePanel summary::after {
+  content: '';
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  margin-left: 4px;
+  border-right: 1.5px solid var(--faint);
+  border-bottom: 1.5px solid var(--faint);
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform 0.2s ease;
+}
+
+.sourcePanel[open] summary::after {
+  transform: rotate(-135deg) translateY(-2px);
+}
+
+.sourcePanel summary small {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 400;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sourcePanel .folderRow,
+.sourcePanel .fileDrop {
+  margin-left: 12px;
+  margin-right: 12px;
+}
+
+.sourcePanel .fileDrop {
+  margin-bottom: 12px;
+}
+
+.trackSearch {
+  margin-bottom: 4px;
+}
+
+.trackSearch input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
+
+.memoryCard {
+  margin-top: 14px;
+}
+
+/* ---------- Touch devices ---------- */
+
+button,
+summary,
+label,
+[role='button'] {
+  touch-action: manipulation;
+}
+
+@media (pointer: coarse) {
+  /* iOS zooms the page when a focused field's text is under 16px. */
+  input:not([type='range']),
+  select,
+  textarea,
+  .djForm input,
+  .djForm select,
+  .djForm textarea,
+  .requestRow input,
+  .artistSearch input,
+  .folderRow input,
+  .cityRow input {
+    font-size: 16px;
+  }
+
+  /* A 4px track is hard to grab: keep it looking thin but give it a tall
+     hit area and a larger thumb. */
+  .seekBar,
+  .volumeControl input {
+    box-sizing: content-box;
+    padding: 14px 0;
+    border-radius: 0;
+    background-clip: content-box !important;
+  }
+
+  .seekBar::-webkit-slider-thumb {
+    width: 18px;
+    height: 18px;
+  }
+
+  .volumeControl input::-webkit-slider-thumb {
+    width: 16px;
+    height: 16px;
+  }
 }
 
 /* ---------- Small screens ---------- */
